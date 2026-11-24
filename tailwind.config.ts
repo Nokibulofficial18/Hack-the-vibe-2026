@@ -13,6 +13,12 @@ const config: Config = {
         background: "var(--background)",
         foreground: "var(--foreground)",
       },
+      fontFamily: {
+        bangla: ["var(--font-hind-siliguri)", "Hind Siliguri", "ui-sans-serif", "system-ui", "sans-serif"],
+      },
+      boxShadow: {
+        xs: "0 1px 2px 0 rgb(15 23 42 / 0.04)",
+      },
     },
   },
   plugins: [],

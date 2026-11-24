@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Compass,
   FilePlus2,
+  Layers,
   MapPin,
   Plus,
   Search,
@@ -16,6 +17,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { useTranslation } from "@/lib/i18n";
 import { useToast } from "@/components/ToastProvider";
 import { ListCardSkeleton } from "@/components/DashboardSkeletons";
 import {
@@ -63,7 +65,6 @@ interface FarmerOption {
   email: string;
 }
 
-// Bounding box for Bangladesh SVG map picker
 const BD_BOUNDS = {
   minLat: 20.5,
   maxLat: 26.8,
@@ -80,6 +81,7 @@ function projectToBdMap(lat: number, lon: number): { x: number; y: number; inBou
 
 export function FarmRegistryClient() {
   const { user, isAdmin, getAuthHeaders } = useAuth();
+  const { t, translateStatus } = useTranslation();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -88,7 +90,6 @@ export function FarmRegistryClient() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Form state (defaulted to Sunamganj Haor, Bangladesh)
   const [selectedDistrictId, setSelectedDistrictId] = useState<string>("sunamganj");
   const [name, setName] = useState("");
   const [cropType, setCropType] = useState("Boro Rice");
@@ -124,11 +125,11 @@ export function FarmRegistryClient() {
         }
       }
     } catch {
-      setFormError("Unable to load registered farms.");
+      setFormError(t("farmLoadErr"));
     } finally {
       setLoading(false);
     }
-  }, [getAuthHeaders]);
+  }, [getAuthHeaders, t]);
 
   useEffect(() => {
     void loadFarms();
@@ -194,10 +195,10 @@ export function FarmRegistryClient() {
     if (!validation.valid) {
       setFieldErrors(validation.errors);
       const firstError = Object.values(validation.errors)[0];
-      setFormError("Please correct the highlighted coordinate or plot fields.");
+      setFormError(t("farmFixErrors"));
       toast({
         variant: "error",
-        title: "Invalid Farm Coordinates or Plot Details",
+        title: t("farmInvalidToastTitle"),
         description: firstError,
       });
       return;
@@ -231,22 +232,27 @@ export function FarmRegistryClient() {
 
       if (!response.ok) {
         setFieldErrors(data.fieldErrors ?? {});
-        const msg = data.error ?? "Failed to register farm plot.";
+        const msg = data.error ?? t("farmRegFailedTitle");
         setFormError(msg);
-        toast({ variant: "error", title: "Registration Failed", description: msg });
+        toast({ variant: "error", title: t("farmRegFailedTitle"), description: msg });
         return;
       }
 
-      const msg = `Registered "${data.farm?.name}" (${formatLandArea(computedHectares)}) at (${latitude}, ${longitude}).`;
+      const msg = t("farmRegSuccessDesc", {
+        name: data.farm?.name ?? name,
+        area: formatLandArea(computedHectares),
+        lat: latitude,
+        lon: longitude,
+      });
       setSuccessMessage(msg);
-      toast({ variant: "success", title: "Farm Plot Registered", description: msg });
+      toast({ variant: "success", title: t("farmRegSuccessTitle"), description: msg });
       setName("");
       await loadFarms();
       router.refresh();
     } catch {
-      const msg = "Network error while registering farm plot.";
+      const msg = t("farmNetErrDesc");
       setFormError(msg);
-      toast({ variant: "error", title: "Network Error", description: msg });
+      toast({ variant: "error", title: t("networkErrorTitle"), description: msg });
     } finally {
       setSubmitting(false);
     }
@@ -255,7 +261,7 @@ export function FarmRegistryClient() {
   const handleDeleteFarm = async (farm: FarmRecord) => {
     const policyCount = farm.policies.length;
     const confirmed = window.confirm(
-      `Delete "${farm.name}"? This will safely cascade and remove ${policyCount} linked ${policyCount === 1 ? "policy" : "policies"}.`
+      t("farmDeleteConfirm", { name: farm.name, count: policyCount })
     );
     if (!confirmed) return;
 
@@ -269,20 +275,20 @@ export function FarmRegistryClient() {
       });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) {
-        const msg = data.error ?? "Failed to delete farm plot.";
+        const msg = data.error ?? t("farmDeleteFailedTitle");
         setFormError(msg);
-        toast({ variant: "error", title: "Delete Failed", description: msg });
+        toast({ variant: "error", title: t("farmDeleteFailedTitle"), description: msg });
         return;
       }
-      const msg = `Deleted "${farm.name}" and cleaned up ${policyCount} linked policy record(s).`;
+      const msg = t("farmDeleteSuccessDesc", { name: farm.name, count: policyCount });
       setSuccessMessage(msg);
-      toast({ variant: "info", title: "Farm Plot Deleted", description: msg });
+      toast({ variant: "info", title: t("farmDeleteSuccessTitle"), description: msg });
       await loadFarms();
       router.refresh();
     } catch {
-      const msg = "Failed to delete farm plot.";
+      const msg = t("farmDeleteFailedTitle");
       setFormError(msg);
-      toast({ variant: "error", title: "Network Error", description: msg });
+      toast({ variant: "error", title: t("networkErrorTitle"), description: msg });
     } finally {
       setDeletingId(null);
     }
@@ -299,6 +305,21 @@ export function FarmRegistryClient() {
     );
   }, [farms, searchQuery]);
 
+  const summary = useMemo(() => {
+    const totalHectares = farms.reduce((sum, f) => sum + f.sizeHectares, 0);
+    const totalActiveCoverage = farms.reduce(
+      (sum, f) =>
+        sum + f.policies.filter((p) => p.status === "ACTIVE").reduce((s, p) => s + p.coverageAmount, 0),
+      0
+    );
+    return {
+      plotCount: farms.length,
+      totalBigha: hectaresToBigha(totalHectares),
+      totalAcres: hectaresToAcres(totalHectares),
+      totalActiveCoverage,
+    };
+  }, [farms]);
+
   const parsedLat = Number(latitude);
   const parsedLon = Number(longitude);
   const pinProjection =
@@ -308,61 +329,110 @@ export function FarmRegistryClient() {
 
   return (
     <div className="space-y-6">
-      {/* Header & Role Scope Indicator */}
-      <div className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:flex-row sm:items-center">
-        <div>
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-800">
+      {/* Minimalist Page Header */}
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div className="min-w-0">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-medium text-slate-600">
             {isAdmin ? (
-              <ShieldCheck className="h-3.5 w-3.5 text-indigo-700" aria-hidden="true" />
+              <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-700" aria-hidden="true" />
             ) : (
-              <Sprout className="h-3.5 w-3.5 text-emerald-700" aria-hidden="true" />
+              <Sprout className="h-3.5 w-3.5 shrink-0 text-emerald-700" aria-hidden="true" />
             )}
-            {isAdmin
-              ? "Admin View · All Bangladesh Farmer Plots"
-              : `Farmer View · Isolated to ${user.name}`}
-          </div>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
-            Farm Plot Registry (Bangladesh)
+            <span>{isAdmin ? t("farmsRoleAdmin") : t("farmsRoleFarmer", { name: user.name })}</span>
+          </span>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+            {t("farmsHeading")}
           </h1>
-          <p className="mt-1 text-sm text-slate-700">
-            Register smallholder plots across climate-vulnerable Bangladesh districts with GPS bounds (`-90°` to `90°` lat, `-180°` to `180°` lon) and land area in <strong>Bigha</strong> &amp; <strong>Acres</strong>.
-          </p>
+          <p className="mt-1 text-sm text-slate-600">{t("farmsSubtitle")}</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-right">
-            <p className="text-xs font-semibold text-slate-600">Visible Plots</p>
-            <p className="text-xl font-bold text-slate-950">{farms.length}</p>
-          </div>
-          <Link
-            href="/policies"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-800"
-          >
-            <FilePlus2 className="h-4 w-4" aria-hidden="true" />
-            Issue Policy
-          </Link>
-        </div>
+
+        <Link
+          href="/policies"
+          className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-xs font-medium text-white shadow-sm shadow-emerald-600/20 transition hover:from-emerald-700 hover:to-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600/30"
+        >
+          <FilePlus2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span>{t("issuePolicyShort")}</span>
+        </Link>
       </div>
+
+      {/* KPI Row */}
+      <section aria-label="Farm Registry KPIs" className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+        <div className="flex flex-col justify-between rounded-xl border border-slate-200/80 border-t-2 border-t-sky-500/80 bg-white p-5 shadow-xs">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+              {t("kpiRegisteredPlots")}
+            </p>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-cyan-600 text-white shadow-sm shadow-sky-500/20">
+              <MapPin className="h-4 w-4" aria-hidden="true" />
+            </span>
+          </div>
+          <div className="mt-3">
+            <p className="text-2xl font-semibold tracking-tight text-slate-900">
+              {summary.plotCount}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">{t("kpiRegisteredPlotsSub")}</p>
+          </div>
+        </div>
+
+        <div className="flex flex-col justify-between rounded-xl border border-slate-200/80 border-t-2 border-t-amber-500/80 bg-white p-5 shadow-xs">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+              {t("kpiTotalCultivated")}
+            </p>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-sm shadow-amber-500/20">
+              <Layers className="h-4 w-4" aria-hidden="true" />
+            </span>
+          </div>
+          <div className="mt-3">
+            <p className="text-2xl font-semibold tracking-tight text-slate-900">
+              {summary.totalBigha.toFixed(1)} {t("unitBigha")}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {t("kpiTotalCultivatedSub", { acres: summary.totalAcres.toFixed(2) })}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col justify-between rounded-xl border border-slate-200/80 border-t-2 border-t-emerald-500/80 bg-white p-5 shadow-xs">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+              {t("kpiActivePlotCoverage")}
+            </p>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-sm shadow-emerald-600/20">
+              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+            </span>
+          </div>
+          <div className="mt-3">
+            <p className="text-2xl font-semibold tracking-tight text-slate-900">
+              {formatCurrency(summary.totalActiveCoverage)}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">{t("kpiActivePlotCoverageSub")}</p>
+          </div>
+        </div>
+      </section>
 
       {/* Main 2-Column Layout */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Registration Form */}
         <section
           aria-labelledby="register-farm-heading"
-          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-5"
+          className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-xs lg:col-span-5"
         >
           <div className="flex items-center gap-2 border-b border-slate-100 pb-4">
-            <Plus className="h-5 w-5 text-emerald-700" aria-hidden="true" />
-            <h2 id="register-farm-heading" className="text-base font-bold text-slate-950">
-              Register New Farm Plot
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+              <Plus className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <h2 id="register-farm-heading" className="text-sm font-semibold text-slate-900">
+              {t("registerNewFarmHeading")}
             </h2>
           </div>
 
           {formError && (
             <div
               role="alert"
-              className="mt-4 flex items-start gap-2 rounded-lg border border-rose-300 bg-rose-50 p-3 text-xs font-semibold text-rose-900"
+              className="mt-4 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-700"
             >
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-700" aria-hidden="true" />
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" aria-hidden="true" />
               <span>{formError}</span>
             </div>
           )}
@@ -370,7 +440,7 @@ export function FarmRegistryClient() {
           {successMessage && (
             <div
               role="status"
-              className="mt-4 flex items-start gap-2 rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-xs font-semibold text-emerald-900"
+              className="mt-4 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-700"
             >
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" aria-hidden="true" />
               <span>{successMessage}</span>
@@ -380,14 +450,14 @@ export function FarmRegistryClient() {
           <form onSubmit={handleSubmit} noValidate className="mt-4 space-y-4">
             {isAdmin && farmers.length > 0 && (
               <div>
-                <label htmlFor="farm-owner" className="block text-xs font-bold text-slate-800">
-                  Assign to Farmer (Admin Override)
+                <label htmlFor="farm-owner" className="block text-xs font-medium text-slate-600">
+                  {t("assignToFarmer")}
                 </label>
                 <select
                   id="farm-owner"
                   value={ownerUserId}
                   onChange={(e) => setOwnerUserId(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
+                  className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/15"
                 >
                   {farmers.map((f) => (
                     <option key={f.id} value={f.id}>
@@ -398,10 +468,9 @@ export function FarmRegistryClient() {
               </div>
             )}
 
-            {/* Bangladesh Climate-Vulnerable District Preset Selector */}
             <div>
-              <label htmlFor="bd-district-select" className="block text-xs font-bold text-slate-800">
-                Bangladesh Climate-Vulnerable District Preset
+              <label htmlFor="bd-district-select" className="block text-xs font-medium text-slate-600">
+                {t("bdDistrictPreset")}
               </label>
               <select
                 id="bd-district-select"
@@ -410,7 +479,7 @@ export function FarmRegistryClient() {
                   const chosen = BANGLADESH_DISTRICTS.find((d) => d.id === e.target.value);
                   if (chosen) applyDistrictPreset(chosen);
                 }}
-                className="mt-1 w-full rounded-lg border border-emerald-300 bg-emerald-50/40 px-3 py-2 text-sm font-medium text-slate-950 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
+                className="mt-1.5 w-full rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2 text-sm font-medium text-slate-900 focus:border-emerald-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-700/15"
               >
                 {BANGLADESH_DISTRICTS.map((d) => (
                   <option key={d.id} value={d.id}>
@@ -418,83 +487,85 @@ export function FarmRegistryClient() {
                   </option>
                 ))}
                 {selectedDistrictId === "custom" && (
-                  <option value="custom">Custom GPS Coordinates</option>
+                  <option value="custom">{t("customGpsOption")}</option>
                 )}
               </select>
             </div>
 
             <div>
-              <label htmlFor="farm-name" className="block text-xs font-bold text-slate-800">
-                Farm Plot Name
+              <label htmlFor="farm-name" className="block text-xs font-medium text-slate-600">
+                {t("farmPlotNameLabel")}
               </label>
               <input
                 id="farm-name"
                 type="text"
-                placeholder="e.g., Tahirpur Haor Boro Plot"
+                placeholder={t("farmPlotNamePlaceholder")}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 aria-invalid={Boolean(fieldErrors.name)}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-950 placeholder:text-slate-500 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
+                className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/15"
               />
               {fieldErrors.name && (
-                <p role="alert" className="mt-1 text-xs font-semibold text-rose-700">
+                <p role="alert" className="mt-1 text-xs font-medium text-rose-700">
                   {fieldErrors.name}
                 </p>
               )}
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor="crop-type" className="block text-xs font-bold text-slate-800">
-                  Crop / Aquaculture Type
+                <label htmlFor="crop-type" className="block text-xs font-medium text-slate-600">
+                  {t("cropTypeLabel")}
                 </label>
                 <input
                   id="crop-type"
                   type="text"
-                  placeholder="e.g., Boro Rice"
+                  placeholder={t("cropTypePlaceholder")}
                   value={cropType}
                   onChange={(e) => setCropType(e.target.value)}
                   aria-invalid={Boolean(fieldErrors.cropType)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-950 placeholder:text-slate-500 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
+                  className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/15"
                 />
                 {fieldErrors.cropType && (
-                  <p role="alert" className="mt-1 text-xs font-semibold text-rose-700">
+                  <p role="alert" className="mt-1 text-xs font-medium text-rose-700">
                     {fieldErrors.cropType}
                   </p>
                 )}
               </div>
 
               <div>
-                <div className="flex items-center justify-between">
-                  <label htmlFor="farm-area" className="block text-xs font-bold text-slate-800">
-                    Land Area ({areaUnit === "BIGHA" ? "Bigha" : "Acres"})
+                <div className="flex items-center justify-between gap-2">
+                  <label htmlFor="farm-area" className="block truncate text-xs font-medium text-slate-600">
+                    {t("landAreaLabel", {
+                      unit: areaUnit === "BIGHA" ? t("unitBigha") : t("unitAcres"),
+                    })}
                   </label>
                   <div
                     role="group"
                     aria-label="Land area unit"
-                    className="inline-flex rounded-md border border-slate-300 bg-slate-100 p-0.5 text-[10px] font-bold"
+                    className="inline-flex shrink-0 rounded-md border border-slate-200 bg-slate-50 p-0.5 text-[10px] font-medium"
                   >
                     <button
                       type="button"
                       onClick={() => setAreaUnit("BIGHA")}
                       aria-pressed={areaUnit === "BIGHA"}
                       className={cn(
-                        "rounded px-1.5 py-0.5 transition",
-                        areaUnit === "BIGHA" ? "bg-emerald-700 text-white" : "text-slate-700"
+                        "whitespace-nowrap rounded px-1.5 py-0.5 transition",
+                        areaUnit === "BIGHA" ? "bg-emerald-700 text-white" : "text-slate-600"
                       )}
                     >
-                      Bigha
+                      {t("unitBigha")}
                     </button>
                     <button
                       type="button"
                       onClick={() => setAreaUnit("ACRES")}
                       aria-pressed={areaUnit === "ACRES"}
                       className={cn(
-                        "rounded px-1.5 py-0.5 transition",
-                        areaUnit === "ACRES" ? "bg-emerald-700 text-white" : "text-slate-700"
+                        "whitespace-nowrap rounded px-1.5 py-0.5 transition",
+                        areaUnit === "ACRES" ? "bg-emerald-700 text-white" : "text-slate-600"
                       )}
                     >
-                      Acres
+                      {t("unitAcres")}
                     </button>
                   </div>
                 </div>
@@ -506,16 +577,16 @@ export function FarmRegistryClient() {
                   value={areaValue}
                   onChange={(e) => setAreaValue(e.target.value)}
                   aria-invalid={Boolean(fieldErrors.sizeHectares)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-950 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
+                  className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/15"
                 />
                 {computedHectares > 0 && (
-                  <p className="mt-1 text-[11px] font-medium text-emerald-800">
-                    ≈ {hectaresToBigha(computedHectares).toFixed(1)} Bigha ·{" "}
-                    {hectaresToAcres(computedHectares).toFixed(2)} Acres
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    ≈ {hectaresToBigha(computedHectares).toFixed(1)} {t("unitBigha")} ·{" "}
+                    {hectaresToAcres(computedHectares).toFixed(2)} {t("unitAcres")}
                   </p>
                 )}
                 {fieldErrors.sizeHectares && (
-                  <p role="alert" className="mt-1 text-xs font-semibold text-rose-700">
+                  <p role="alert" className="mt-1 text-xs font-medium text-rose-700">
                     {fieldErrors.sizeHectares}
                   </p>
                 )}
@@ -523,41 +594,37 @@ export function FarmRegistryClient() {
             </div>
 
             {/* Interactive Bangladesh District Coordinate Picker */}
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                  <Compass className="h-3.5 w-3.5 text-emerald-700" aria-hidden="true" />
-                  Bangladesh GPS Coordinate Picker
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                  <Compass className="h-3.5 w-3.5 shrink-0 text-emerald-700" aria-hidden="true" />
+                  {t("gpsPickerTitle")}
                 </span>
-                <span className="text-[11px] font-medium text-slate-600">
-                  Click map or choose district
-                </span>
+                <span className="text-[11px] text-slate-500">{t("gpsPickerHint")}</span>
               </div>
 
               <svg
                 viewBox="0 0 320 200"
                 onClick={handleMapPick}
                 role="img"
-                aria-label="Bangladesh district latitude and longitude coordinate map"
-                className="mt-2 h-36 w-full cursor-crosshair rounded-lg border border-slate-200 bg-sky-50"
+                aria-label={t("gpsPickerTitle")}
+                className="mt-2.5 h-36 w-full cursor-crosshair rounded-lg border border-slate-200/80 bg-white"
               >
-                {/* Lat/Lon Gridlines */}
                 {[50, 100, 150].map((y) => (
-                  <line key={y} x1="0" y1={y} x2="320" y2={y} stroke="#cbd5e1" strokeWidth="0.6" />
+                  <line key={y} x1="0" y1={y} x2="320" y2={y} stroke="#f1f5f9" strokeWidth="1" />
                 ))}
                 {[80, 160, 240].map((x) => (
-                  <line key={x} x1={x} y1="0" x2={x} y2="200" stroke="#cbd5e1" strokeWidth="0.6" />
+                  <line key={x} x1={x} y1="0" x2={x} y2="200" stroke="#f1f5f9" strokeWidth="1" />
                 ))}
 
-                {/* Stylized Bangladesh landmass silhouette */}
                 <path
                   d="M65,24 L118,18 L156,36 L220,44 L256,56 L246,84 L214,108 L224,148 L244,184 L222,188 L196,154 L160,158 L112,152 L74,144 L64,108 L46,72 Z"
-                  fill="#d1fae5"
-                  stroke="#34d399"
+                  fill="#ECFDF5"
+                  stroke="#047857"
                   strokeWidth="1.2"
+                  strokeOpacity="0.6"
                 />
 
-                {/* Plot all 5 climate-vulnerable Bangladesh districts */}
                 {BANGLADESH_DISTRICTS.map((d) => {
                   const pt = projectToBdMap(d.latitude, d.longitude);
                   const isSelected = selectedDistrictId === d.id;
@@ -566,17 +633,17 @@ export function FarmRegistryClient() {
                       <circle
                         cx={pt.x}
                         cy={pt.y}
-                        r={isSelected ? 5 : 3}
-                        fill={isSelected ? "#047857" : "#475569"}
+                        r={isSelected ? 4.5 : 3}
+                        fill={isSelected ? "#047857" : "#64748b"}
                         stroke="#ffffff"
-                        strokeWidth="1"
+                        strokeWidth="1.2"
                       />
                       <text
                         x={pt.x + 6}
                         y={pt.y + 3}
                         fontSize="7.5"
-                        fontWeight={isSelected ? "700" : "500"}
-                        fill={isSelected ? "#064e3b" : "#334155"}
+                        fontWeight={isSelected ? "600" : "500"}
+                        fill={isSelected ? "#047857" : "#475569"}
                       >
                         {d.name.split(" ")[0]}
                       </text>
@@ -590,14 +657,14 @@ export function FarmRegistryClient() {
                       cx={pinProjection.x}
                       cy={pinProjection.y}
                       r="9"
-                      fill="#059669"
-                      fillOpacity="0.2"
+                      fill="#047857"
+                      fillOpacity="0.16"
                     />
                     <circle
                       cx={pinProjection.x}
                       cy={pinProjection.y}
                       r="4"
-                      fill="#059669"
+                      fill="#047857"
                       stroke="#ffffff"
                       strokeWidth="1.4"
                     />
@@ -612,10 +679,10 @@ export function FarmRegistryClient() {
                     type="button"
                     onClick={() => applyDistrictPreset(district)}
                     className={cn(
-                      "rounded-md border px-2 py-1 text-[11px] font-semibold transition",
+                      "whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-medium transition",
                       selectedDistrictId === district.id
-                        ? "border-emerald-600 bg-emerald-700 text-white"
-                        : "border-slate-300 bg-white text-slate-700 hover:border-emerald-400 hover:text-emerald-800"
+                        ? "border-emerald-700 bg-emerald-700 text-white"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"
                     )}
                   >
                     {district.name}
@@ -624,10 +691,10 @@ export function FarmRegistryClient() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor="farm-lat" className="block text-xs font-bold text-slate-800">
-                  Latitude (-90 to 90)
+                <label htmlFor="farm-lat" className="block text-xs font-medium text-slate-600">
+                  {t("latitudeLabel")}
                 </label>
                 <input
                   id="farm-lat"
@@ -644,7 +711,7 @@ export function FarmRegistryClient() {
                     setFieldErrors((prev) => {
                       const next = { ...prev };
                       if (val !== "" && (Number.isNaN(n) || n < -90 || n > 90)) {
-                        next.latitude = "Latitude must be between -90 and 90 degrees.";
+                        next.latitude = t("latRangeError");
                       } else {
                         delete next.latitude;
                       }
@@ -654,22 +721,22 @@ export function FarmRegistryClient() {
                   aria-invalid={Boolean(fieldErrors.latitude)}
                   aria-describedby={fieldErrors.latitude ? "farm-lat-error" : undefined}
                   className={cn(
-                    "mt-1 w-full rounded-lg border px-3 py-2 font-mono text-sm text-slate-950 focus:outline-none focus:ring-2",
+                    "mt-1.5 w-full rounded-lg border px-3 py-2 font-mono text-sm text-slate-900 focus:outline-none focus:ring-2",
                     fieldErrors.latitude
-                      ? "border-rose-500 bg-rose-50/40 focus:border-rose-600 focus:ring-rose-500/25"
-                      : "border-slate-300 focus:border-emerald-600 focus:ring-emerald-600/20"
+                      ? "border-rose-300 bg-rose-50/40 focus:border-rose-500 focus:ring-rose-500/20"
+                      : "border-slate-200 focus:border-emerald-700 focus:ring-emerald-700/15"
                   )}
                 />
                 {fieldErrors.latitude && (
-                  <p id="farm-lat-error" role="alert" className="mt-1 text-xs font-semibold text-rose-700">
+                  <p id="farm-lat-error" role="alert" className="mt-1 text-xs font-medium text-rose-700">
                     {fieldErrors.latitude}
                   </p>
                 )}
               </div>
 
               <div>
-                <label htmlFor="farm-lon" className="block text-xs font-bold text-slate-800">
-                  Longitude (-180 to 180)
+                <label htmlFor="farm-lon" className="block text-xs font-medium text-slate-600">
+                  {t("longitudeLabel")}
                 </label>
                 <input
                   id="farm-lon"
@@ -686,7 +753,7 @@ export function FarmRegistryClient() {
                     setFieldErrors((prev) => {
                       const next = { ...prev };
                       if (val !== "" && (Number.isNaN(n) || n < -180 || n > 180)) {
-                        next.longitude = "Longitude must be between -180 and 180 degrees.";
+                        next.longitude = t("lonRangeError");
                       } else {
                         delete next.longitude;
                       }
@@ -696,14 +763,14 @@ export function FarmRegistryClient() {
                   aria-invalid={Boolean(fieldErrors.longitude)}
                   aria-describedby={fieldErrors.longitude ? "farm-lon-error" : undefined}
                   className={cn(
-                    "mt-1 w-full rounded-lg border px-3 py-2 font-mono text-sm text-slate-950 focus:outline-none focus:ring-2",
+                    "mt-1.5 w-full rounded-lg border px-3 py-2 font-mono text-sm text-slate-900 focus:outline-none focus:ring-2",
                     fieldErrors.longitude
-                      ? "border-rose-500 bg-rose-50/40 focus:border-rose-600 focus:ring-rose-500/25"
-                      : "border-slate-300 focus:border-emerald-600 focus:ring-emerald-600/20"
+                      ? "border-rose-300 bg-rose-50/40 focus:border-rose-500 focus:ring-rose-500/20"
+                      : "border-slate-200 focus:border-emerald-700 focus:ring-emerald-700/15"
                   )}
                 />
                 {fieldErrors.longitude && (
-                  <p id="farm-lon-error" role="alert" className="mt-1 text-xs font-semibold text-rose-700">
+                  <p id="farm-lon-error" role="alert" className="mt-1 text-xs font-medium text-rose-700">
                     {fieldErrors.longitude}
                   </p>
                 )}
@@ -713,138 +780,154 @@ export function FarmRegistryClient() {
             <button
               type="submit"
               disabled={submitting}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm shadow-emerald-600/20 transition hover:from-emerald-700 hover:to-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600/30 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <MapPin className="h-4 w-4" aria-hidden="true" />
-              {submitting ? "Registering Farm Plot..." : "Register Farm Plot"}
+              <MapPin className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>{submitting ? t("registeringFarm") : t("registerFarmBtn")}</span>
             </button>
           </form>
         </section>
 
         {/* Registered Farms List */}
         <section aria-labelledby="registered-farms-heading" className="space-y-4 lg:col-span-7">
-          <div className="flex flex-col justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center">
-            <h2 id="registered-farms-heading" className="text-base font-bold text-slate-950">
-              Registered Farm Plots ({filteredFarms.length})
-            </h2>
-            <div className="relative w-full sm:w-64">
-              <Search
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"
-                aria-hidden="true"
-              />
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search district, crop, farmer..."
-                aria-label="Search registered farm plots"
-                className="w-full rounded-lg border border-slate-300 py-1.5 pl-9 pr-3 text-xs text-slate-900 placeholder:text-slate-500 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
-              />
+          <div className="rounded-xl border border-slate-200/80 bg-white shadow-xs">
+            <div className="flex flex-col justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center">
+              <div className="flex items-center gap-2">
+                <h2 id="registered-farms-heading" className="text-sm font-semibold text-slate-900">
+                  {t("registeredPlotsHeading")}
+                </h2>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                  {filteredFarms.length}
+                </span>
+              </div>
+              <div className="relative w-full sm:w-64">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400"
+                  aria-hidden="true"
+                />
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={t("searchFarmsPlaceholder")}
+                  aria-label={t("searchFarmsPlaceholder")}
+                  className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/15"
+                />
+              </div>
             </div>
-          </div>
 
-          {loading ? (
-            <ListCardSkeleton rows={3} />
-          ) : filteredFarms.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
-              <MapPin className="mx-auto h-8 w-8 text-slate-400" aria-hidden="true" />
-              <p className="mt-2 text-sm font-semibold text-slate-800">No farm plots found</p>
-              <p className="mt-1 text-xs text-slate-600">
-                Select a Bangladesh district preset and register your first plot to begin climate monitoring.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4">
-              {filteredFarms.map((farm) => {
-                const activePolicies = farm.policies.filter((p) => p.status === "ACTIVE");
-                const totalCoverage = activePolicies.reduce((s, p) => s + p.coverageAmount, 0);
+            {loading ? (
+              <div className="p-5">
+                <ListCardSkeleton rows={3} />
+              </div>
+            ) : filteredFarms.length === 0 ? (
+              <div className="p-10 text-center">
+                <MapPin className="mx-auto h-7 w-7 text-slate-300" aria-hidden="true" />
+                <p className="mt-2 text-sm font-medium text-slate-900">{t("noFarmsFoundTitle")}</p>
+                <p className="mt-1 text-xs text-slate-500">{t("noFarmsFoundDesc")}</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {filteredFarms.map((farm) => {
+                  const activePolicies = farm.policies.filter((p) => p.status === "ACTIVE");
+                  const totalCoverage = activePolicies.reduce((s, p) => s + p.coverageAmount, 0);
 
-                return (
-                  <article
-                    key={farm.id}
-                    className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-base font-bold text-slate-950">{farm.name}</h3>
-                          <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-900 ring-1 ring-emerald-200">
-                            {farm.cropType}
-                          </span>
-                          {isAdmin && (
-                            <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-semibold text-indigo-900 ring-1 ring-indigo-200">
-                              Farmer: {farm.user.name}
+                  return (
+                    <article
+                      key={farm.id}
+                      className="px-5 py-4 transition hover:bg-slate-50/80"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-sm font-semibold text-slate-900">{farm.name}</h3>
+                            <span className="whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700">
+                              {farm.cropType}
                             </span>
-                          )}
+                            {isAdmin && (
+                              <span className="whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium text-slate-600">
+                                {farm.user.name}
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-2.5 text-xs text-slate-500">
+                            <span className="inline-flex items-center gap-1 font-mono text-slate-600">
+                              <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+                              {farm.latitude.toFixed(4)}, {farm.longitude.toFixed(4)}
+                            </span>
+                            <span className="text-slate-300">·</span>
+                            <span className="font-medium text-slate-700">
+                              {formatLandArea(farm.sizeHectares)}
+                            </span>
+                            <span className="text-slate-300">·</span>
+                            <span>
+                              {t("activePolicySummary", { count: activePolicies.length })} (
+                              <span className="font-medium text-slate-800">
+                                {formatCurrency(totalCoverage)}
+                              </span>
+                              )
+                            </span>
+                          </div>
                         </div>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs font-medium text-slate-600">
-                          <span className="inline-flex items-center gap-1 font-mono">
-                            <MapPin className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
-                            {farm.latitude.toFixed(4)}, {farm.longitude.toFixed(4)}
-                          </span>
-                          <span>·</span>
-                          <span className="font-semibold text-slate-800">
-                            {formatLandArea(farm.sizeHectares)}
-                          </span>
-                          <span>·</span>
-                          <span>
-                            {activePolicies.length} active{" "}
-                            {activePolicies.length === 1 ? "policy" : "policies"} (
-                            {formatCurrency(totalCoverage)})
-                          </span>
-                        </div>
-                      </div>
 
-                      <div className="flex items-center gap-2">
-                        <Link
-                          href={`/policies?farmId=${farm.id}`}
-                          className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 transition hover:bg-emerald-100"
-                        >
-                          <FilePlus2 className="h-3.5 w-3.5" aria-hidden="true" />
-                          Add Policy
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteFarm(farm)}
-                          disabled={deletingId === farm.id}
-                          aria-label={`Delete farm ${farm.name}`}
-                          className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-
-                    {farm.policies.length > 0 && (
-                      <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
-                        {farm.policies.map((policy) => (
-                          <span
-                            key={policy.id}
-                            className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-800"
+                        <div className="flex shrink-0 items-center gap-2">
+                          <Link
+                            href={`/policies?farmId=${farm.id}`}
+                            className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
                           >
-                            <span className="font-mono font-bold">{policy.metricType}</span>
-                            <span>≥ {policy.thresholdValue}</span>
-                            <span className="text-slate-400">·</span>
-                            <span>{formatCurrency(policy.coverageAmount)}</span>
-                            <span
-                              className={
-                                policy.status === "ACTIVE"
-                                  ? "font-bold text-emerald-800"
-                                  : "font-bold text-indigo-800"
-                              }
-                            >
-                              ({policy.status})
-                            </span>
-                          </span>
-                        ))}
+                            <FilePlus2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                            <span>{t("addPolicyBtn")}</span>
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteFarm(farm)}
+                            disabled={deletingId === farm.id}
+                            aria-label={`${t("deleteBtn")} ${farm.name}`}
+                            className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-50"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                            <span>{t("deleteBtn")}</span>
+                          </button>
+                        </div>
                       </div>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-          )}
+
+                      {farm.policies.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {farm.policies.map((policy) => (
+                            <span
+                              key={policy.id}
+                              className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] text-slate-700"
+                            >
+                              <span className="font-mono font-medium text-slate-800">
+                                {policy.metricType}
+                              </span>
+                              <span>≥ {policy.thresholdValue}</span>
+                              <span className="text-slate-300">·</span>
+                              <span className="font-medium text-slate-900">
+                                {formatCurrency(policy.coverageAmount)}
+                              </span>
+                              <span
+                                className={cn(
+                                  "font-medium",
+                                  policy.status === "ACTIVE"
+                                    ? "text-emerald-700"
+                                    : policy.status === "CLAIMED"
+                                      ? "text-amber-700"
+                                      : "text-slate-500"
+                                )}
+                              >
+                                ({translateStatus(policy.status)})
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </section>
       </div>
     </div>

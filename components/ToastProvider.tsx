@@ -40,31 +40,31 @@ const ToastContext = createContext<ToastContextValue | undefined>(undefined);
 
 const VARIANT_STYLES: Record<
   ToastVariant,
-  { container: string; iconColor: string; titleColor: string; descColor: string }
+  { container: string; iconBox: string; titleColor: string; descColor: string }
 > = {
   success: {
-    container: "border-emerald-300 bg-emerald-50 text-emerald-950",
-    iconColor: "text-emerald-700",
-    titleColor: "text-emerald-950",
-    descColor: "text-emerald-900",
+    container: "border-emerald-200/90 bg-white",
+    iconBox: "bg-emerald-50 text-emerald-700",
+    titleColor: "text-slate-900",
+    descColor: "text-slate-600",
   },
   error: {
-    container: "border-rose-300 bg-rose-50 text-rose-950",
-    iconColor: "text-rose-700",
-    titleColor: "text-rose-950",
-    descColor: "text-rose-900",
+    container: "border-rose-200/90 bg-white",
+    iconBox: "bg-rose-50 text-rose-700",
+    titleColor: "text-slate-900",
+    descColor: "text-slate-600",
   },
   warning: {
-    container: "border-amber-300 bg-amber-50 text-amber-950",
-    iconColor: "text-amber-700",
-    titleColor: "text-amber-950",
-    descColor: "text-amber-900",
+    container: "border-amber-200/90 bg-white",
+    iconBox: "bg-amber-50 text-amber-700",
+    titleColor: "text-slate-900",
+    descColor: "text-slate-600",
   },
   info: {
-    container: "border-indigo-300 bg-indigo-50 text-indigo-950",
-    iconColor: "text-indigo-700",
-    titleColor: "text-indigo-950",
-    descColor: "text-indigo-900",
+    container: "border-slate-200/90 bg-white",
+    iconBox: "bg-slate-100 text-slate-600",
+    titleColor: "text-slate-900",
+    descColor: "text-slate-600",
   },
 };
 
@@ -94,7 +94,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div
         aria-live="polite"
         aria-label="System Notifications"
-        className="pointer-events-none fixed bottom-4 right-4 left-4 z-50 flex flex-col items-end gap-2.5 sm:left-auto sm:w-full sm:max-w-sm"
+        className="pointer-events-none fixed top-20 right-4 left-4 z-50 flex flex-col items-end gap-2.5 sm:left-auto sm:w-full sm:max-w-sm"
       >
         {toasts.map((item) => {
           const style = VARIANT_STYLES[item.variant];
@@ -103,33 +103,28 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               key={item.id}
               role={item.variant === "error" ? "alert" : "status"}
               className={cn(
-                "pointer-events-auto flex w-full items-start gap-3 rounded-xl border p-3.5 shadow-lg transition-all",
+                "pointer-events-auto flex w-full items-start gap-3 rounded-xl border p-3.5 shadow-md transition-all",
                 style.container
               )}
             >
-              {item.variant === "success" ? (
-                <CheckCircle2
-                  className={cn("mt-0.5 h-4 w-4 shrink-0", style.iconColor)}
-                  aria-hidden="true"
-                />
-              ) : item.variant === "error" ? (
-                <XCircle
-                  className={cn("mt-0.5 h-4 w-4 shrink-0", style.iconColor)}
-                  aria-hidden="true"
-                />
-              ) : item.variant === "warning" ? (
-                <AlertTriangle
-                  className={cn("mt-0.5 h-4 w-4 shrink-0", style.iconColor)}
-                  aria-hidden="true"
-                />
-              ) : (
-                <Info
-                  className={cn("mt-0.5 h-4 w-4 shrink-0", style.iconColor)}
-                  aria-hidden="true"
-                />
-              )}
-              <div className="min-w-0 flex-1">
-                <p className={cn("text-xs font-bold", style.titleColor)}>{item.title}</p>
+              <span
+                className={cn(
+                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
+                  style.iconBox
+                )}
+              >
+                {item.variant === "success" ? (
+                  <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                ) : item.variant === "error" ? (
+                  <XCircle className="h-4 w-4" aria-hidden="true" />
+                ) : item.variant === "warning" ? (
+                  <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <Info className="h-4 w-4" aria-hidden="true" />
+                )}
+              </span>
+              <div className="min-w-0 flex-1 pt-0.5">
+                <p className={cn("text-xs font-semibold", style.titleColor)}>{item.title}</p>
                 {item.description && (
                   <p className={cn("mt-0.5 text-xs leading-snug", style.descColor)}>
                     {item.description}
@@ -140,7 +135,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 type="button"
                 onClick={() => dismiss(item.id)}
                 aria-label={`Dismiss notification: ${item.title}`}
-                className="rounded-md p-1 text-slate-600 transition hover:bg-black/5 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-500"
+                className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
               >
                 <X className="h-3.5 w-3.5" aria-hidden="true" />
               </button>

@@ -11,9 +11,10 @@ import {
   Play,
   RotateCcw,
   ShieldCheck,
-  Sparkles,
+  Workflow,
   XCircle,
 } from "lucide-react";
+import { useTranslation, type TranslationKey } from "@/lib/i18n";
 import { useToast } from "@/components/ToastProvider";
 import { DisbursementReceiptCard } from "@/components/DisbursementReceiptCard";
 import {
@@ -96,13 +97,18 @@ interface WorkflowRunnerWidgetProps {
   onWorkflowUpdated: () => Promise<void>;
 }
 
-const PIPELINE_STAGES = [
-  { step: 1, name: "EVENT_DETECTED", label: "Event Detected", stateBadge: "TRIGGERED" },
-  { step: 2, name: "POLICY_VALIDATED", label: "Policy Validated", stateBadge: "VALIDATED" },
-  { step: 3, name: "PAYOUT_CALCULATED", label: "Tiered Payout", stateBadge: "CALCULATED" },
-  { step: 4, name: "FUNDS_RESERVED", label: "Funds Reserved", stateBadge: "RESERVED" },
-  { step: 5, name: "DISBURSEMENT_ISSUED", label: "MFS Disbursed", stateBadge: "DISBURSED" },
-] as const;
+const PIPELINE_STAGES: ReadonlyArray<{
+  step: number;
+  name: string;
+  labelKey: TranslationKey;
+  stateBadge: string;
+}> = [
+  { step: 1, name: "EVENT_DETECTED", labelKey: "stage1Label", stateBadge: "TRIGGERED" },
+  { step: 2, name: "POLICY_VALIDATED", labelKey: "stage2Label", stateBadge: "VALIDATED" },
+  { step: 3, name: "PAYOUT_CALCULATED", labelKey: "stage3Label", stateBadge: "CALCULATED" },
+  { step: 4, name: "FUNDS_RESERVED", labelKey: "stage4Label", stateBadge: "RESERVED" },
+  { step: 5, name: "DISBURSEMENT_ISSUED", labelKey: "stage5Label", stateBadge: "DISBURSED" },
+];
 
 type StageVisualStatus = "SUCCESS" | "RETRIED" | "FAILED" | "PENDING";
 
@@ -122,6 +128,7 @@ export function WorkflowRunnerWidget({
   getAuthHeaders,
   onWorkflowUpdated,
 }: WorkflowRunnerWidgetProps) {
+  const { t, translateStatus } = useTranslation();
   const { toast } = useToast();
   const [selectedPolicyId, setSelectedPolicyId] = useState<string>("");
   const [observedValue, setObservedValue] = useState<string>("");
@@ -208,39 +215,28 @@ export function WorkflowRunnerWidget({
       setLastStepsExecuted(data.stepsExecuted ?? []);
 
       if (data.outcome === "DISBURSED") {
-        const detail = data.message ?? "All 5 steps succeeded and MFS payout was disbursed.";
-        setBanner({ tone: "success", title: "Workflow Completed (Steps 1 → 5 DISBURSED)", detail });
-        toast({ variant: "success", title: "MFS Payout Disbursed (5/5)", description: detail });
+        const detail = data.message ?? t("payoutDisbursedTitle");
+        setBanner({ tone: "success", title: t("wfCompletedTitle"), detail });
+        toast({ variant: "success", title: t("payoutDisbursedTitle"), description: detail });
       } else if (data.outcome === "PAUSED_AT_STEP_4") {
-        const detail =
-          data.message ??
-          "Transaction rolled back cleanly before disbursement. Use Resume Workflow to recover from Step 4.";
-        setBanner({
-          tone: "warning",
-          title: "Step 4 Failed & Rolled Back — Paused at Step 3 (CALCULATED)",
-          detail,
-        });
-        toast({ variant: "warning", title: "Step 4 Failure Rolled Back", description: detail });
+        const detail = data.message ?? t("rolledBackPill");
+        setBanner({ tone: "warning", title: t("wfPausedTitle"), detail });
+        toast({ variant: "warning", title: t("wfPausedTitle"), description: detail });
       } else if (data.outcome === "DUPLICATE_BLOCKED" || response.status === 409) {
-        const detail =
-          data.message ?? data.error ?? "Duplicate payout prevented by idempotencyKey lock.";
-        setBanner({
-          tone: "info",
-          title: "Idempotency Safeguard Triggered (409 Duplicate Blocked)",
-          detail,
-        });
-        toast({ variant: "warning", title: "Duplicate Execution Blocked", description: detail });
+        const detail = data.message ?? data.error ?? t("duplicateBlockedTitle");
+        setBanner({ tone: "info", title: t("wfDuplicateTitle"), detail });
+        toast({ variant: "warning", title: t("duplicateBlockedTitle"), description: detail });
       } else {
-        const detail = data.message ?? data.error ?? "Evaluation did not trigger a payout.";
-        setBanner({ tone: "error", title: "Workflow Halted", detail });
-        toast({ variant: "error", title: "Workflow Halted", description: detail });
+        const detail = data.message ?? data.error ?? t("wfHaltedTitle");
+        setBanner({ tone: "error", title: t("wfHaltedTitle"), detail });
+        toast({ variant: "error", title: t("wfHaltedTitle"), description: detail });
       }
 
       await onWorkflowUpdated();
     } catch {
-      const detail = "Unable to communicate with /api/weather/evaluate.";
-      setBanner({ tone: "error", title: "Network Error", detail });
-      toast({ variant: "error", title: "Workflow Network Error", description: detail });
+      const detail = t("resumeNetworkErrDesc");
+      setBanner({ tone: "error", title: t("networkErrorTitle"), detail });
+      toast({ variant: "error", title: t("networkErrorTitle"), description: detail });
     } finally {
       setRunningAction(null);
     }
@@ -276,29 +272,25 @@ export function WorkflowRunnerWidget({
       setLastStepsExecuted(data.stepsExecuted ?? []);
 
       if (data.outcome === "DISBURSED") {
-        const detail =
-          data.message ?? "Resumed cleanly from Step 4 without re-running Steps 1–3.";
-        setBanner({
-          tone: "success",
-          title: `Recovered & Completed from Step ${data.resumedFromStep ?? 4} → Step 5`,
-          detail,
-        });
-        toast({ variant: "success", title: "Workflow Recovered & Disbursed", description: detail });
+        const detail = data.message ?? t("payoutDisbursedTitle");
+        const title = t("wfRecoveredTitle", { step: data.resumedFromStep ?? 4 });
+        setBanner({ tone: "success", title, detail });
+        toast({ variant: "success", title, description: detail });
       } else if (data.outcome === "DUPLICATE_BLOCKED" || response.status === 409) {
-        const detail = data.message ?? "Duplicate disbursement prevented.";
-        setBanner({ tone: "info", title: "Already Settled (Idempotency Lock)", detail });
-        toast({ variant: "warning", title: "Duplicate Payout Blocked", description: detail });
+        const detail = data.message ?? t("duplicateBlockedTitle");
+        setBanner({ tone: "info", title: t("wfAlreadySettledTitle"), detail });
+        toast({ variant: "warning", title: t("duplicateBlockedTitle"), description: detail });
       } else {
-        const detail = data.message ?? data.error ?? "Unable to resume claim workflow.";
-        setBanner({ tone: "error", title: "Resume Failed", detail });
-        toast({ variant: "error", title: "Resume Failed", description: detail });
+        const detail = data.message ?? data.error ?? t("resumeFailedTitle");
+        setBanner({ tone: "error", title: t("resumeFailedTitle"), detail });
+        toast({ variant: "error", title: t("resumeFailedTitle"), description: detail });
       }
 
       await onWorkflowUpdated();
     } catch {
-      const detail = "Failed to resume workflow.";
-      setBanner({ tone: "error", title: "Network Error", detail });
-      toast({ variant: "error", title: "Network Error", description: detail });
+      const detail = t("resumeNetworkErrDesc");
+      setBanner({ tone: "error", title: t("networkErrorTitle"), detail });
+      toast({ variant: "error", title: t("networkErrorTitle"), description: detail });
     } finally {
       setRunningAction(null);
     }
@@ -354,40 +346,38 @@ export function WorkflowRunnerWidget({
   return (
     <section
       aria-labelledby="a07-workflow-runner-heading"
-      className="rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50/80 via-white to-emerald-50/40 p-5 shadow-sm sm:p-6"
+      className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-xs"
     >
       {/* Header */}
-      <div className="flex flex-col justify-between gap-4 border-b border-indigo-100 pb-4 lg:flex-row lg:items-center">
+      <div className="flex flex-col justify-between gap-4 border-b border-slate-100 pb-4 lg:flex-row lg:items-center">
         <div>
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-indigo-900">
-            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-            Advanced Challenge A07 · Tiered MFS Workflow Runner &amp; Recovery
-          </div>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700">
+            <Workflow className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <span>{t("a07Badge")}</span>
+          </span>
           <h2
             id="a07-workflow-runner-heading"
-            className="mt-2 text-lg font-bold text-slate-950"
+            className="mt-2 text-base font-semibold text-slate-900"
           >
-            Interactive 5-Step Parametric Settlement Visualizer
+            {t("a07Heading")}
           </h2>
-          <p className="mt-0.5 text-xs text-slate-700">
-            Test <strong>Moderate (50%)</strong> vs <strong>Severe (100%)</strong> breach tiers,
-            inject a <strong>Step 4 Failure</strong> rollback, resume directly from Step 4, and
-            inspect generated <strong>bKash / Nagad / Rocket</strong> digital disbursement receipts.
-          </p>
+          <p className="mt-0.5 text-xs text-slate-600">{t("a07Subtitle")}</p>
         </div>
 
         {inspectedClaim && (
-          <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-right shadow-sm">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-600">
-              Active Claim State
+          <div className="shrink-0 rounded-lg border border-slate-200/80 bg-slate-50/70 px-3.5 py-2 text-right">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-slate-500">
+              {t("activeClaimState")}
             </p>
             <div className="mt-0.5 flex items-center justify-end gap-2">
-              <span className="text-sm font-bold text-slate-950">{inspectedClaim.status}</span>
-              <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-700">
-                Step {inspectedClaim.currentStep}/5
+              <span className="text-sm font-semibold text-slate-900">
+                {translateStatus(inspectedClaim.status)}
+              </span>
+              <span className="whitespace-nowrap rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[11px] font-medium text-slate-600">
+                {t("stepProgressInline", { step: inspectedClaim.currentStep })}
               </span>
             </div>
-            <p className="mt-0.5 font-mono text-[10px] text-slate-600">
+            <p className="mt-0.5 font-mono text-[10px] text-slate-500">
               {inspectedClaim.idempotencyKey}
             </p>
           </div>
@@ -395,25 +385,25 @@ export function WorkflowRunnerWidget({
       </div>
 
       {/* Controls Bar */}
-      <div className="mt-4 space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+      <div className="mt-4 space-y-3 rounded-xl border border-slate-200/80 bg-slate-50/50 p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex flex-wrap items-end gap-3">
             <div>
               <label
                 htmlFor="runner-policy-select"
-                className="block text-[11px] font-bold text-slate-800"
+                className="block text-[11px] font-medium text-slate-600"
               >
-                Active Policy Target
+                {t("activePolicyTarget")}
               </label>
               <select
                 id="runner-policy-select"
                 value={selectedPolicyId}
                 onChange={(e) => handleSelectPolicy(e.target.value)}
                 disabled={activePolicies.length === 0 || runningAction !== null}
-                className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-900 focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/25"
+                className="mt-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-900 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/15"
               >
                 {activePolicies.length === 0 ? (
-                  <option value="">No active policies available — issue one in /policies</option>
+                  <option value="">{t("noActivePoliciesOption")}</option>
                 ) : (
                   activePolicies.map((p) => {
                     const meta = getMetricMeta(p.metricType);
@@ -431,9 +421,9 @@ export function WorkflowRunnerWidget({
             <div>
               <label
                 htmlFor="runner-observed-val"
-                className="block text-[11px] font-bold text-slate-800"
+                className="block text-[11px] font-medium text-slate-600"
               >
-                Observed Weather ({selectedUnit || "value"})
+                {t("observedMetricInput", { unit: selectedUnit || "val" })}
               </label>
               <input
                 id="runner-observed-val"
@@ -442,11 +432,10 @@ export function WorkflowRunnerWidget({
                 value={observedValue}
                 onChange={(e) => setObservedValue(e.target.value)}
                 disabled={activePolicies.length === 0 || runningAction !== null}
-                className="mt-1 w-28 rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs text-slate-900 focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/25"
+                className="mt-1 w-28 rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-900 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/15"
               />
             </div>
 
-            {/* Quick Tier Presets (Moderate 50% vs Severe 100%) */}
             {selectedPolicy && (
               <div className="flex flex-wrap items-center gap-1.5 pb-0.5">
                 <button
@@ -461,9 +450,9 @@ export function WorkflowRunnerWidget({
                       )
                     )
                   }
-                  className="rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-950 transition hover:bg-amber-100"
+                  className="whitespace-nowrap rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] font-medium text-amber-700 transition hover:bg-amber-100/70"
                 >
-                  Moderate 50% (
+                  {t("moderate50Btn")} (
                   {getModerateSample(selectedPolicy.metricType, selectedPolicy.thresholdValue)}
                   {selectedUnit})
                 </button>
@@ -476,9 +465,9 @@ export function WorkflowRunnerWidget({
                       )
                     )
                   }
-                  className="rounded-md border border-rose-300 bg-rose-50 px-2.5 py-1.5 text-[11px] font-bold text-rose-950 transition hover:bg-rose-100"
+                  className="whitespace-nowrap rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-medium text-rose-700 transition hover:bg-rose-100/70"
                 >
-                  Severe 100% (
+                  {t("severe100Btn")} (
                   {getSevereSample(selectedPolicy.metricType, selectedPolicy.thresholdValue)}
                   {selectedUnit})
                 </button>
@@ -486,28 +475,31 @@ export function WorkflowRunnerWidget({
             )}
           </div>
 
-          {/* Action Buttons */}
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => runEvaluate(false, "FULL")}
               disabled={!selectedPolicyId || runningAction !== null}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-3.5 py-2 text-xs font-medium text-white shadow-sm shadow-emerald-600/20 transition hover:from-emerald-700 hover:to-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600/30 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Play className="h-3.5 w-3.5" aria-hidden="true" />
-              {runningAction === "FULL" ? "Running Pipeline..." : "Run Full 5-Step Pipeline"}
+              <Play className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span>
+                {runningAction === "FULL" ? t("runningPipelineBtn") : t("runFullPipelineBtn")}
+              </span>
             </button>
 
             <button
               type="button"
               onClick={() => runEvaluate(true, "FAIL_STEP_4")}
               disabled={!selectedPolicyId || runningAction !== null}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-rose-700 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-rose-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-medium text-rose-700 transition hover:bg-rose-100/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <AlertOctagon className="h-3.5 w-3.5" aria-hidden="true" />
-              {runningAction === "FAIL_STEP_4"
-                ? "Simulating Step 4 Fault..."
-                : "Simulate Step 4 Failure"}
+              <AlertOctagon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span>
+                {runningAction === "FAIL_STEP_4"
+                  ? t("simulatingStep4Btn")
+                  : t("simStep4FailBtn")}
+              </span>
             </button>
 
             {isPausedRecoverable && (
@@ -515,12 +507,14 @@ export function WorkflowRunnerWidget({
                 type="button"
                 onClick={handleResumeWorkflow}
                 disabled={runningAction !== null}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-700 px-3.5 py-2 text-xs font-semibold text-white shadow-sm ring-2 ring-indigo-300 transition hover:bg-indigo-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-3.5 py-2 text-xs font-medium text-white shadow-sm shadow-emerald-600/20 transition hover:from-emerald-700 hover:to-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600/30 disabled:opacity-50"
               >
-                <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                {runningAction === "RESUME"
-                  ? "Resuming Step 4 → 5..."
-                  : "Resume Workflow (Step 4 → 5)"}
+                <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span>
+                  {runningAction === "RESUME"
+                    ? t("resumingStep4To5Btn")
+                    : t("resumeStep4To5Btn")}
+                </span>
               </button>
             )}
 
@@ -529,30 +523,32 @@ export function WorkflowRunnerWidget({
                 type="button"
                 onClick={() => runEvaluate(false, "IDEMPOTENCY")}
                 disabled={runningAction !== null}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-900 transition hover:bg-indigo-100 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
               >
-                <Lock className="h-3.5 w-3.5" aria-hidden="true" />
-                {runningAction === "IDEMPOTENCY"
-                  ? "Checking Lock..."
-                  : "Test Idempotency Lock"}
+                <Lock className="h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden="true" />
+                <span>
+                  {runningAction === "IDEMPOTENCY"
+                    ? t("checkingLockBtn")
+                    : t("testIdempotencyBtn")}
+                </span>
               </button>
             )}
           </div>
         </div>
 
-        {/* Live Tiered Preview Pill */}
         {selectedPolicy && livePreviewTier && (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2.5 text-[11px] text-slate-700">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/70 pt-2.5 text-[11px] text-slate-600">
             <span>
-              <strong>Tier Rule:</strong> Moderate ({selectedPolicy.thresholdValue}–
+              <strong className="font-medium text-slate-800">{t("tierRuleLabel")}</strong>{" "}
+              {t("moderateLabel")} ({selectedPolicy.thresholdValue}–
               {livePreviewTier.severeCutoff - 0.1}
-              {selectedUnit}) = <strong>50%</strong> · Severe (≥ {livePreviewTier.severeCutoff}
-              {selectedUnit}) = <strong>100%</strong>
+              {selectedUnit}) = 50% · {t("severeLabel")} (≥ {livePreviewTier.severeCutoff}
+              {selectedUnit}) = 100%
             </span>
-            <span className="font-bold text-slate-900">
-              Projected Payout: {livePreviewTier.tierLabel} →{" "}
-              <span className="text-emerald-800">
-                {formatCurrency(livePreviewTier.payoutAmount)}
+            <span className="font-medium text-slate-700">
+              {t("projectedPayoutLabel")}{" "}
+              <span className="font-semibold text-emerald-700">
+                {formatCurrency(livePreviewTier.payoutAmount)} ({livePreviewTier.payoutPercentage}%)
               </span>
             </span>
           </div>
@@ -565,25 +561,25 @@ export function WorkflowRunnerWidget({
           role={banner.tone === "error" ? "alert" : "status"}
           className={cn(
             "mt-4 flex items-start gap-2.5 rounded-xl border p-3.5 text-xs",
-            banner.tone === "success" && "border-emerald-300 bg-emerald-50 text-emerald-950",
-            banner.tone === "warning" && "border-amber-300 bg-amber-50 text-amber-950",
-            banner.tone === "info" && "border-indigo-300 bg-indigo-50 text-indigo-950",
-            banner.tone === "error" && "border-rose-300 bg-rose-50 text-rose-950"
+            banner.tone === "success" && "border-emerald-200 bg-emerald-50 text-emerald-800",
+            banner.tone === "warning" && "border-amber-200 bg-amber-50 text-amber-800",
+            banner.tone === "info" && "border-slate-200 bg-slate-50 text-slate-700",
+            banner.tone === "error" && "border-rose-200 bg-rose-50 text-rose-800"
           )}
         >
           {banner.tone === "success" ? (
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" aria-hidden="true" />
           ) : banner.tone === "info" ? (
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-indigo-700" aria-hidden="true" />
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-slate-600" aria-hidden="true" />
           ) : (
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           )}
           <div>
-            <p className="font-bold">{banner.title}</p>
+            <p className="font-semibold">{banner.title}</p>
             <p className="mt-0.5">{banner.detail}</p>
             {lastStepsExecuted.length > 0 && (
-              <p className="mt-1 font-mono text-[11px] font-medium">
-                Executed this run: {lastStepsExecuted.join(" → ")}
+              <p className="mt-1 font-mono text-[11px] opacity-85">
+                {t("executedPrefix")} {lastStepsExecuted.join(" → ")}
               </p>
             )}
           </div>
@@ -592,30 +588,33 @@ export function WorkflowRunnerWidget({
 
       {/* 5-Step Progress Bar & Stage Visualizer */}
       <div className="mt-5">
-        <div className="mb-2 flex items-center justify-between text-xs">
-          <span className="font-bold text-slate-800">
-            Pipeline Execution Progress
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <span className="font-medium text-slate-700">
+            {t("pipelineProgressLabel")}
             {inspectedClaim ? ` · ${inspectedClaim.policy.farm.name}` : ""}
           </span>
-          <span className="font-mono font-bold text-slate-700">
-            {progressPercent}% ({inspectedClaim?.currentStep ?? 0} / 5 steps persisted)
+          <span className="font-mono text-xs text-slate-600">
+            {t("stepsPersistedLabel", {
+              pct: progressPercent,
+              step: inspectedClaim?.currentStep ?? 0,
+            })}
           </span>
         </div>
 
-        <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
           <div
             role="progressbar"
             aria-valuenow={progressPercent}
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-label="Parametric workflow execution progress"
+            aria-label={t("pipelineProgressLabel")}
             className={cn(
               "h-full rounded-full transition-all duration-300",
               isPausedRecoverable
                 ? "bg-amber-500"
                 : inspectedClaim?.status === "FAILED"
-                  ? "bg-rose-600"
-                  : "bg-emerald-600"
+                  ? "bg-rose-500"
+                  : "bg-emerald-700"
             )}
             style={{ width: `${progressPercent}%` }}
           />
@@ -630,61 +629,61 @@ export function WorkflowRunnerWidget({
                 key={stage.name}
                 className={cn(
                   "flex flex-col justify-between rounded-xl border p-3.5 transition",
-                  status === "SUCCESS" && "border-emerald-300 bg-emerald-50/70",
-                  status === "RETRIED" && "border-sky-300 bg-sky-50/70",
-                  status === "FAILED" && "border-rose-300 bg-rose-50/80 ring-1 ring-rose-200",
-                  status === "PENDING" && "border-slate-200 bg-white"
+                  status === "SUCCESS" && "border-emerald-200/90 bg-emerald-50/30",
+                  status === "RETRIED" && "border-emerald-200/90 bg-emerald-50/30",
+                  status === "FAILED" && "border-rose-200 bg-rose-50/40",
+                  status === "PENDING" && "border-slate-200/80 bg-white"
                 )}
               >
                 <div>
                   <div className="flex items-center justify-between gap-1">
-                    <span className="font-mono text-[10px] font-bold text-slate-600">
-                      STEP {stage.step}
+                    <span className="whitespace-nowrap font-mono text-[10px] font-medium text-slate-500">
+                      {t("stepPrefix", { n: stage.step })}
                     </span>
                     <span
                       className={cn(
-                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold",
-                        status === "SUCCESS" && "bg-emerald-100 text-emerald-900",
-                        status === "RETRIED" && "bg-sky-100 text-sky-900",
-                        status === "FAILED" && "bg-rose-100 text-rose-900",
-                        status === "PENDING" && "bg-slate-200 text-slate-700"
+                        "inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-medium",
+                        status === "SUCCESS" &&
+                          "border-emerald-200 bg-emerald-50 text-emerald-700",
+                        status === "RETRIED" &&
+                          "border-emerald-200 bg-emerald-50 text-emerald-700",
+                        status === "FAILED" && "border-rose-200 bg-rose-50 text-rose-700",
+                        status === "PENDING" && "border-slate-200 bg-slate-100 text-slate-600"
                       )}
                     >
                       {status === "SUCCESS" || status === "RETRIED" ? (
-                        <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                        <CheckCircle2 className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />
                       ) : status === "FAILED" ? (
-                        <XCircle className="h-3 w-3" aria-hidden="true" />
+                        <XCircle className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />
                       ) : (
-                        <Clock className="h-3 w-3" aria-hidden="true" />
+                        <Clock className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />
                       )}
                       {status === "RETRIED"
-                        ? "Recovered"
+                        ? t("stageStatusRecovered")
                         : status === "SUCCESS"
-                          ? "Success"
+                          ? t("stageStatusSuccess")
                           : status === "FAILED"
-                            ? "Failed"
-                            : "Pending"}
+                            ? t("stageStatusFailed")
+                            : t("stageStatusPending")}
                     </span>
                   </div>
 
-                  <p className="mt-2 text-xs font-bold text-slate-950">{stage.label}</p>
-                  <p className="font-mono text-[10px] font-medium text-slate-600">{stage.name}</p>
+                  <p className="mt-2 text-xs font-semibold text-slate-900">{t(stage.labelKey)}</p>
+                  <p className="font-mono text-[10px] text-slate-500">{stage.name}</p>
 
                   {log ? (
-                    <p className="mt-2 line-clamp-3 text-[11px] leading-relaxed text-slate-800">
+                    <p className="mt-2 line-clamp-3 text-[11px] leading-relaxed text-slate-600">
                       {log.details}
                     </p>
                   ) : (
-                    <p className="mt-2 text-[11px] text-slate-500">
-                      Waiting for previous step...
-                    </p>
+                    <p className="mt-2 text-[11px] text-slate-400">{t("waitingPrevStep")}</p>
                   )}
                 </div>
 
-                <div className="mt-3 flex items-center justify-between border-t border-slate-200/80 pt-2 text-[10px] font-medium text-slate-600">
-                  <span className="font-mono">{stage.stateBadge}</span>
+                <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 text-[10px] text-slate-500">
+                  <span className="truncate">{translateStatus(stage.stateBadge)}</span>
                   {log && (
-                    <span className="font-mono">
+                    <span className="shrink-0 font-mono">
                       {new Date(log.timestamp).toLocaleTimeString()}
                     </span>
                   )}
@@ -696,20 +695,23 @@ export function WorkflowRunnerWidget({
 
         {/* Financial Safety & Idempotency Footer */}
         {inspectedClaim && (
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-slate-800">
-                <KeyRound className="h-3.5 w-3.5 text-indigo-700" aria-hidden="true" />
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 px-4 py-2.5 text-xs">
+            <div className="flex flex-wrap items-center gap-3 text-slate-600">
+              <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-medium text-slate-700">
+                <KeyRound className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
                 {inspectedClaim.idempotencyKey}
               </span>
               <span className="text-slate-300">|</span>
-              <span className="text-slate-700">
-                Beneficiary: <strong>{inspectedClaim.policy.farm.user.name}</strong>
+              <span>
+                {t("beneficiaryLabel")}{" "}
+                <strong className="font-medium text-slate-900">
+                  {inspectedClaim.policy.farm.user.name}
+                </strong>
               </span>
               <span className="text-slate-300">|</span>
-              <span className="text-slate-700">
-                Payout:{" "}
-                <strong>
+              <span>
+                {t("payoutLabel")}{" "}
+                <strong className="font-semibold text-slate-900">
                   {formatCurrency(inspectedClaim.payoutAmount)}
                   {inspectedClaim.payoutPercentage ? ` (${inspectedClaim.payoutPercentage}%)` : ""}
                 </strong>
@@ -717,12 +719,12 @@ export function WorkflowRunnerWidget({
             </div>
             <div>
               {isPausedRecoverable ? (
-                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-950 ring-1 ring-amber-300">
-                  Rolled Back Safely · ৳0 Disbursed Until Resumed
+                <span className="whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700">
+                  {t("rolledBackPill")}
                 </span>
               ) : isAlreadyDisbursed ? (
-                <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-950 ring-1 ring-emerald-300">
-                  Disbursed · Double-Payout Locked
+                <span className="whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700">
+                  {t("disbursedLockedPill")}
                 </span>
               ) : null}
             </div>

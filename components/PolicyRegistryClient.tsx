@@ -6,9 +6,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   ArrowUpDown,
+  Banknote,
   Calculator,
   CheckCircle2,
   FileCheck2,
+  FileText,
   Plus,
   Search,
   ShieldCheck,
@@ -16,6 +18,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { useTranslation } from "@/lib/i18n";
 import { useToast } from "@/components/ToastProvider";
 import { ListCardSkeleton } from "@/components/DashboardSkeletons";
 import {
@@ -64,14 +67,15 @@ interface PolicyRecord {
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  ACTIVE: "bg-emerald-100 text-emerald-800",
-  CLAIMED: "bg-indigo-100 text-indigo-800",
-  EXPIRED: "bg-amber-100 text-amber-800",
-  CANCELLED: "bg-slate-200 text-slate-700",
+  ACTIVE: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+  CLAIMED: "bg-amber-50 text-amber-700 border border-amber-200",
+  EXPIRED: "bg-amber-50 text-amber-700 border border-amber-200",
+  CANCELLED: "bg-slate-100 text-slate-600 border border-slate-200",
 };
 
 export function PolicyRegistryClient() {
   const { user, isAdmin, getAuthHeaders } = useAuth();
+  const { t, translateStatus, translateMetric } = useTranslation();
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -81,13 +85,11 @@ export function PolicyRegistryClient() {
   const [policies, setPolicies] = useState<PolicyRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Filters & sorting (M05)
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [metricFilter, setMetricFilter] = useState("ALL");
   const [sortBy, setSortBy] = useState<"createdAt" | "coverageAmount" | "thresholdValue">("createdAt");
 
-  // Policy Form (BDT micro-insurance defaults: ৳15,000 coverage, ৳900 premium)
   const [farmId, setFarmId] = useState(preselectedFarmId);
   const [metricType, setMetricType] = useState<MetricType>("RAINFALL_MAX");
   const [thresholdValue, setThresholdValue] = useState("65");
@@ -127,11 +129,11 @@ export function PolicyRegistryClient() {
         setPolicies(policyData.policies);
       }
     } catch {
-      setFormError("Failed to load policy registry.");
+      setFormError(t("policyLoadErr"));
     } finally {
       setLoading(false);
     }
-  }, [getAuthHeaders, preselectedFarmId]);
+  }, [getAuthHeaders, preselectedFarmId, t]);
 
   useEffect(() => {
     void loadData();
@@ -149,9 +151,9 @@ export function PolicyRegistryClient() {
     setFieldErrors((prev) => {
       const next = { ...prev };
       if (val !== "" && (Number.isNaN(num) || num <= 0)) {
-        next.coverageAmount = "Coverage amount must be greater than ৳0.";
+        next.coverageAmount = t("policyCoverageMinErr");
       } else if (num > 5000000) {
-        next.coverageAmount = "Coverage amount cannot exceed ৳50,00,000 per micro-policy.";
+        next.coverageAmount = t("policyCoverageMaxErr");
       } else {
         delete next.coverageAmount;
       }
@@ -179,10 +181,10 @@ export function PolicyRegistryClient() {
     if (!validation.valid) {
       setFieldErrors(validation.errors);
       const firstError = Object.values(validation.errors)[0];
-      setFormError("Please fix the validation errors before issuing this policy.");
+      setFormError(t("policyFixErrors"));
       toast({
         variant: "error",
-        title: "Invalid Policy Parameters",
+        title: t("policyInvalidToastTitle"),
         description: firstError,
       });
       return;
@@ -216,29 +218,35 @@ export function PolicyRegistryClient() {
 
       if (!response.ok) {
         setFieldErrors(data.fieldErrors ?? {});
-        const msg = data.error ?? "Failed to create parametric policy.";
+        const msg = data.error ?? t("policyRejectedTitle");
         setFormError(msg);
-        toast({ variant: "error", title: "Policy Issuance Rejected", description: msg });
+        toast({ variant: "error", title: t("policyRejectedTitle"), description: msg });
         return;
       }
 
       const meta = getMetricMeta(metricType);
-      const msg = `Issued active ${meta.label} policy (≥ ${thresholdValue}${meta.unit}, max ${formatCurrency(Number(coverageAmount))}) for ${data.policy?.farm.name}.`;
+      const msg = t("policyIssuedDesc", {
+        metric: translateMetric(metricType),
+        threshold: thresholdValue,
+        unit: meta.unit,
+        coverage: formatCurrency(Number(coverageAmount)),
+        farm: data.policy?.farm.name ?? "",
+      });
       setSuccessMessage(msg);
-      toast({ variant: "success", title: "Parametric Policy Issued", description: msg });
+      toast({ variant: "success", title: t("policyIssuedTitle"), description: msg });
       await loadData();
       router.refresh();
     } catch {
-      const msg = "Network error while creating policy.";
+      const msg = t("policyRejectedTitle");
       setFormError(msg);
-      toast({ variant: "error", title: "Network Error", description: msg });
+      toast({ variant: "error", title: t("networkErrorTitle"), description: msg });
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleCancelPolicy = async (policy: PolicyRecord) => {
-    if (!window.confirm(`Cancel active policy on ${policy.farm.name}?`)) return;
+    if (!window.confirm(t("policyCancelConfirm", { farm: policy.farm.name }))) return;
     try {
       const response = await fetch(`/api/policies/${policy.id}`, {
         method: "PATCH",
@@ -249,16 +257,16 @@ export function PolicyRegistryClient() {
         body: JSON.stringify({ status: "CANCELLED" }),
       });
       if (response.ok) {
-        const msg = `Cancelled policy on ${policy.farm.name}.`;
+        const msg = t("policyCancelledDesc", { farm: policy.farm.name });
         setSuccessMessage(msg);
-        toast({ variant: "info", title: "Policy Cancelled", description: msg });
+        toast({ variant: "info", title: t("policyCancelledTitle"), description: msg });
         await loadData();
         router.refresh();
       }
     } catch {
-      const msg = "Unable to update policy status.";
+      const msg = t("policyUpdateErrDesc");
       setFormError(msg);
-      toast({ variant: "error", title: "Update Error", description: msg });
+      toast({ variant: "error", title: t("policyUpdateErrTitle"), description: msg });
     }
   };
 
@@ -316,66 +324,98 @@ export function PolicyRegistryClient() {
 
   return (
     <div className="space-y-6">
-      {/* Header & KPI Bar */}
-      <div className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:flex-row sm:items-center">
-        <div>
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-            {isAdmin ? (
-              <ShieldCheck className="h-3.5 w-3.5 text-indigo-600" aria-hidden="true" />
-            ) : (
-              <Sprout className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
-            )}
-            {isAdmin
-              ? "Admin View · Global Policy Portfolio"
-              : `Farmer View · ${user.name}'s Contracts`}
-          </div>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900">
-            Parametric Policy Registry
-          </h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Configure objective weather triggers, coverage caps, and automated payout multipliers per farm plot.
-          </p>
-        </div>
+      {/* Minimalist Page Header */}
+      <div>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-medium text-slate-600">
+          {isAdmin ? (
+            <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-700" aria-hidden="true" />
+          ) : (
+            <Sprout className="h-3.5 w-3.5 shrink-0 text-emerald-700" aria-hidden="true" />
+          )}
+          <span>
+            {isAdmin ? t("policiesRoleAdmin") : t("policiesRoleFarmer", { name: user.name })}
+          </span>
+        </span>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+          {t("policiesHeading")}
+        </h1>
+        <p className="mt-1 text-sm text-slate-600">{t("policiesSubtitle")}</p>
+      </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
-            <p className="text-[11px] font-semibold uppercase text-slate-500">Active Liability</p>
-            <p className="mt-0.5 text-lg font-bold text-slate-900">
+      {/* KPI Cards Row */}
+      <section aria-label="Policy Portfolio KPIs" className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+        <div className="flex flex-col justify-between rounded-xl border border-slate-200/80 border-t-2 border-t-emerald-500/80 bg-white p-5 shadow-xs">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+              {t("kpiActiveLiability")}
+            </p>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-sm shadow-emerald-600/20">
+              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+            </span>
+          </div>
+          <div className="mt-3">
+            <p className="text-2xl font-semibold tracking-tight text-slate-900">
               {formatCurrency(kpis.activeLiability)}
             </p>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
-            <p className="text-[11px] font-semibold uppercase text-slate-500">Active / Claimed</p>
-            <p className="mt-0.5 text-lg font-bold text-slate-900">
-              {kpis.activeCount} <span className="text-sm font-medium text-indigo-600">/ {kpis.claimedCount}</span>
-            </p>
-          </div>
-          <div className="col-span-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 sm:col-span-1">
-            <p className="text-[11px] font-semibold uppercase text-slate-500">Premiums Pool</p>
-            <p className="mt-0.5 text-lg font-bold text-emerald-700">
-              {formatCurrency(kpis.totalPremiums)}
-            </p>
+            <p className="mt-1 text-xs text-slate-500">{t("kpiActiveLiabilitySub")}</p>
           </div>
         </div>
-      </div>
+
+        <div className="flex flex-col justify-between rounded-xl border border-slate-200/80 border-t-2 border-t-sky-500/80 bg-white p-5 shadow-xs">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+              {t("kpiActiveVsClaimed")}
+            </p>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-cyan-600 text-white shadow-sm shadow-sky-500/20">
+              <FileText className="h-4 w-4" aria-hidden="true" />
+            </span>
+          </div>
+          <div className="mt-3">
+            <p className="text-2xl font-semibold tracking-tight text-slate-900">
+              {kpis.activeCount}{" "}
+              <span className="text-base font-medium text-slate-400">/ {kpis.claimedCount}</span>
+            </p>
+            <p className="mt-1 text-xs text-slate-500">{t("kpiActiveVsClaimedSub")}</p>
+          </div>
+        </div>
+
+        <div className="flex flex-col justify-between rounded-xl border border-slate-200/80 border-t-2 border-t-amber-500/80 bg-white p-5 shadow-xs">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+              {t("kpiPremiumsPool")}
+            </p>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-sm shadow-amber-500/20">
+              <Banknote className="h-4 w-4" aria-hidden="true" />
+            </span>
+          </div>
+          <div className="mt-3">
+            <p className="text-2xl font-semibold tracking-tight text-slate-900">
+              {formatCurrency(kpis.totalPremiums)}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">{t("kpiPremiumsPoolSub")}</p>
+          </div>
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Create Policy Form */}
         <section
           aria-labelledby="issue-policy-heading"
-          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-5"
+          className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-xs lg:col-span-5"
         >
           <div className="flex items-center gap-2 border-b border-slate-100 pb-4">
-            <Plus className="h-5 w-5 text-emerald-600" aria-hidden="true" />
-            <h2 id="issue-policy-heading" className="text-base font-semibold text-slate-900">
-              Issue Parametric Policy
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+              <Plus className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <h2 id="issue-policy-heading" className="text-sm font-semibold text-slate-900">
+              {t("issuePolicyHeading")}
             </h2>
           </div>
 
           {formError && (
             <div
               role="alert"
-              className="mt-4 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800"
+              className="mt-4 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-700"
             >
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" aria-hidden="true" />
               <span>{formError}</span>
@@ -385,37 +425,35 @@ export function PolicyRegistryClient() {
           {successMessage && (
             <div
               role="status"
-              className="mt-4 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800"
+              className="mt-4 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-700"
             >
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" aria-hidden="true" />
               <span>{successMessage}</span>
             </div>
           )}
 
           {farms.length === 0 && !loading ? (
-            <div className="mt-4 rounded-xl border border-dashed border-slate-300 p-6 text-center">
-              <p className="text-sm font-medium text-slate-700">No farm plots registered yet</p>
-              <p className="mt-1 text-xs text-slate-500">
-                Register a farm plot before purchasing a parametric climate policy.
-              </p>
+            <div className="mt-4 rounded-xl border border-dashed border-slate-200 p-6 text-center">
+              <p className="text-sm font-medium text-slate-900">{t("noFarmsYetTitle")}</p>
+              <p className="mt-1 text-xs text-slate-500">{t("noFarmsYetDesc")}</p>
               <Link
                 href="/farms"
-                className="mt-3 inline-flex items-center rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                className="mt-3 inline-flex items-center whitespace-nowrap rounded-lg bg-emerald-700 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-800"
               >
-                Go to Farm Registry
+                {t("goToFarmRegistry")}
               </Link>
             </div>
           ) : (
             <form onSubmit={handleCreatePolicy} noValidate className="mt-4 space-y-4">
               <div>
-                <label htmlFor="policy-farm" className="block text-xs font-semibold text-slate-700">
-                  Target Farm Plot
+                <label htmlFor="policy-farm" className="block text-xs font-medium text-slate-600">
+                  {t("targetFarmPlot")}
                 </label>
                 <select
                   id="policy-farm"
                   value={farmId}
                   onChange={(e) => setFarmId(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/15"
                 >
                   {farms.map((farm) => (
                     <option key={farm.id} value={farm.id}>
@@ -425,33 +463,35 @@ export function PolicyRegistryClient() {
                   ))}
                 </select>
                 {fieldErrors.farmId && (
-                  <p className="mt-1 text-xs font-medium text-rose-600">{fieldErrors.farmId}</p>
+                  <p className="mt-1 text-xs font-medium text-rose-700">{fieldErrors.farmId}</p>
                 )}
               </div>
 
               <div>
-                <label htmlFor="metric-type" className="block text-xs font-semibold text-slate-700">
-                  Parametric Trigger Metric
+                <label htmlFor="metric-type" className="block text-xs font-medium text-slate-600">
+                  {t("parametricMetricLabel")}
                 </label>
                 <select
                   id="metric-type"
                   value={metricType}
                   onChange={(e) => handleMetricChange(e.target.value as MetricType)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/15"
                 >
                   {METRIC_OPTIONS.map((m) => (
                     <option key={m.type} value={m.type}>
-                      {m.label} ({m.type})
+                      {translateMetric(m.type)} ({m.type})
                     </option>
                   ))}
                 </select>
-                <p className="mt-1 text-[11px] text-slate-500">{activeMetricMeta.description}</p>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label htmlFor="threshold-val" className="block text-xs font-semibold text-slate-700">
-                    Trigger Threshold ({activeMetricMeta.unit})
+                  <label
+                    htmlFor="threshold-val"
+                    className="block text-xs font-medium text-slate-600"
+                  >
+                    {t("triggerThresholdLabel", { unit: activeMetricMeta.unit })}
                   </label>
                   <input
                     id="threshold-val"
@@ -459,18 +499,21 @@ export function PolicyRegistryClient() {
                     step="any"
                     value={thresholdValue}
                     onChange={(e) => setThresholdValue(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/15"
                   />
                   {fieldErrors.thresholdValue && (
-                    <p className="mt-1 text-xs font-medium text-rose-600">
+                    <p className="mt-1 text-xs font-medium text-rose-700">
                       {fieldErrors.thresholdValue}
                     </p>
                   )}
                 </div>
 
                 <div>
-                  <label htmlFor="coverage-amount" className="block text-xs font-bold text-slate-800">
-                    Max Coverage Cap (BDT ৳, &gt; 0)
+                  <label
+                    htmlFor="coverage-amount"
+                    className="block text-xs font-medium text-slate-600"
+                  >
+                    {t("maxCoverageLabel")}
                   </label>
                   <input
                     id="coverage-amount"
@@ -482,10 +525,10 @@ export function PolicyRegistryClient() {
                     aria-invalid={Boolean(fieldErrors.coverageAmount)}
                     aria-describedby={fieldErrors.coverageAmount ? "coverage-amount-error" : undefined}
                     className={cn(
-                      "mt-1 w-full rounded-lg border px-3 py-2 text-sm text-slate-950 focus:outline-none focus:ring-2",
+                      "mt-1.5 w-full rounded-lg border px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2",
                       fieldErrors.coverageAmount
-                        ? "border-rose-500 bg-rose-50/40 focus:border-rose-600 focus:ring-rose-500/25"
-                        : "border-slate-300 focus:border-emerald-600 focus:ring-emerald-600/20"
+                        ? "border-rose-300 bg-rose-50/40 focus:border-rose-500 focus:ring-rose-500/20"
+                        : "border-slate-200 focus:border-emerald-700 focus:ring-emerald-700/15"
                     )}
                   />
                   <div className="mt-1.5 flex flex-wrap gap-1">
@@ -494,7 +537,12 @@ export function PolicyRegistryClient() {
                         key={preset}
                         type="button"
                         onClick={() => handleCoverageChange(String(preset))}
-                        className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-900"
+                        className={cn(
+                          "whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition",
+                          Number(coverageAmount) === preset
+                            ? "border-emerald-700 bg-emerald-700 text-white"
+                            : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                        )}
                       >
                         {formatCurrency(preset)}
                       </button>
@@ -504,7 +552,7 @@ export function PolicyRegistryClient() {
                     <p
                       id="coverage-amount-error"
                       role="alert"
-                      className="mt-1 text-xs font-semibold text-rose-700"
+                      className="mt-1 text-xs font-medium text-rose-700"
                     >
                       {fieldErrors.coverageAmount}
                     </p>
@@ -512,10 +560,10 @@ export function PolicyRegistryClient() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label htmlFor="premium-paid" className="block text-xs font-bold text-slate-800">
-                    Premium Paid (BDT ৳)
+                  <label htmlFor="premium-paid" className="block text-xs font-medium text-slate-600">
+                    {t("premiumPaidLabel")}
                   </label>
                   <input
                     id="premium-paid"
@@ -523,60 +571,60 @@ export function PolicyRegistryClient() {
                     step="any"
                     value={premiumPaid}
                     onChange={(e) => setPremiumPaid(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/15"
                   />
                   {fieldErrors.premiumPaid && (
-                    <p className="mt-1 text-xs font-medium text-rose-600">
+                    <p className="mt-1 text-xs font-medium text-rose-700">
                       {fieldErrors.premiumPaid}
                     </p>
                   )}
                 </div>
 
                 <div>
-                  <label htmlFor="duration-days" className="block text-xs font-semibold text-slate-700">
-                    Coverage Window (Days)
+                  <label
+                    htmlFor="duration-days"
+                    className="block text-xs font-medium text-slate-600"
+                  >
+                    {t("coverageWindowLabel")}
                   </label>
                   <input
                     id="duration-days"
                     type="number"
                     value={durationDays}
                     onChange={(e) => setDurationDays(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/15"
                   />
                   {fieldErrors.durationDays && (
-                    <p className="mt-1 text-xs font-medium text-rose-600">
+                    <p className="mt-1 text-xs font-medium text-rose-700">
                       {fieldErrors.durationDays}
                     </p>
                   )}
                 </div>
               </div>
 
-              {/* Live Tiered Payout Rules Preview (M04) */}
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-950">
-                  <Calculator className="h-3.5 w-3.5 text-emerald-700" aria-hidden="true" />
-                  Tiered Parametric Payout Schedule (MFS Instant Credit)
+              {/* Live Tiered Payout Rules Preview */}
+              <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-900">
+                  <Calculator className="h-3.5 w-3.5 shrink-0 text-emerald-700" aria-hidden="true" />
+                  <span>{t("tieredScheduleTitle")}</span>
                 </div>
-                <p className="mt-1 text-[11px] text-emerald-900">
-                  Moderate breach pays <strong>50%</strong> of coverage; severe breach pays{" "}
-                  <strong>100%</strong> directly to bKash / Nagad / Rocket.
-                </p>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                  <div className="rounded-lg border border-amber-200 bg-white p-2.5">
-                    <span className="text-[11px] font-semibold text-amber-900">
-                      Moderate ({parsedThreshold}–{severeCutoff - 0.1}
+                <p className="mt-1 text-[11px] text-slate-600">{t("tieredScheduleDesc")}</p>
+                <div className="mt-2.5 grid grid-cols-2 gap-2.5 text-xs">
+                  <div className="rounded-lg border border-slate-200/80 bg-white p-2.5">
+                    <span className="text-[11px] font-medium text-amber-700">
+                      {t("moderateLabel")} ({parsedThreshold}–{severeCutoff - 0.1}
                       {activeMetricMeta.unit}) · 50%
                     </span>
-                    <p className="mt-0.5 font-extrabold text-slate-950">
+                    <p className="mt-0.5 text-sm font-semibold text-slate-900">
                       {formatCurrency(moderatePreview.payoutAmount)}
                     </p>
                   </div>
-                  <div className="rounded-lg border border-emerald-200 bg-white p-2.5">
-                    <span className="text-[11px] font-semibold text-emerald-900">
-                      Severe (≥ {severeCutoff}
+                  <div className="rounded-lg border border-slate-200/80 bg-white p-2.5">
+                    <span className="text-[11px] font-medium text-emerald-700">
+                      {t("severeLabel")} (≥ {severeCutoff}
                       {activeMetricMeta.unit}) · 100%
                     </span>
-                    <p className="mt-0.5 font-extrabold text-emerald-800">
+                    <p className="mt-0.5 text-sm font-semibold text-slate-900">
                       {formatCurrency(severePreview.payoutAmount)}
                     </p>
                   </div>
@@ -586,22 +634,28 @@ export function PolicyRegistryClient() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm shadow-emerald-600/20 transition hover:from-emerald-700 hover:to-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600/30 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <FileCheck2 className="h-4 w-4" aria-hidden="true" />
-                {submitting ? "Issuing Parametric Policy..." : "Issue Parametric Policy"}
+                <FileCheck2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>{submitting ? t("issuingPolicy") : t("issuePolicyBtn")}</span>
               </button>
             </form>
           )}
         </section>
 
         {/* Policy Portfolio Table with Search / Filter / Sort */}
-        <section aria-labelledby="policy-list-heading" className="space-y-4 lg:col-span-7">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 id="policy-list-heading" className="text-base font-semibold text-slate-900">
-                Policy Contracts ({filteredPolicies.length})
-              </h2>
+        <section aria-labelledby="policy-list-heading" className="lg:col-span-7">
+          <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-xs">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+              <div className="flex items-center gap-2">
+                <h2 id="policy-list-heading" className="text-sm font-semibold text-slate-900">
+                  {t("policyContractsHeading")}
+                </h2>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                  {filteredPolicies.length}
+                </span>
+              </div>
+
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative">
                   <Search
@@ -612,38 +666,38 @@ export function PolicyRegistryClient() {
                     type="search"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Filter farm, crop..."
-                    aria-label="Filter policies"
-                    className="w-40 rounded-lg border border-slate-200 py-1.5 pl-8 pr-2.5 text-xs text-slate-700 focus:border-emerald-500 focus:outline-none"
+                    placeholder={t("filterFarmPlaceholder")}
+                    aria-label={t("filterFarmPlaceholder")}
+                    className="w-40 rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/15"
                   />
                 </div>
                 <select
-                  aria-label="Filter by status"
+                  aria-label={t("allStatuses")}
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700"
+                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:border-emerald-700 focus:outline-none"
                 >
-                  <option value="ALL">All Statuses</option>
-                  <option value="ACTIVE">ACTIVE</option>
-                  <option value="CLAIMED">CLAIMED</option>
-                  <option value="CANCELLED">CANCELLED</option>
-                  <option value="EXPIRED">EXPIRED</option>
+                  <option value="ALL">{t("allStatuses")}</option>
+                  <option value="ACTIVE">{translateStatus("ACTIVE")}</option>
+                  <option value="CLAIMED">{translateStatus("CLAIMED")}</option>
+                  <option value="CANCELLED">{translateStatus("CANCELLED")}</option>
+                  <option value="EXPIRED">{translateStatus("EXPIRED")}</option>
                 </select>
                 <select
-                  aria-label="Filter by metric"
+                  aria-label={t("allMetrics")}
                   value={metricFilter}
                   onChange={(e) => setMetricFilter(e.target.value)}
-                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700"
+                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:border-emerald-700 focus:outline-none"
                 >
-                  <option value="ALL">All Metrics</option>
+                  <option value="ALL">{t("allMetrics")}</option>
                   {METRIC_OPTIONS.map((m) => (
                     <option key={m.type} value={m.type}>
-                      {m.shortLabel}
+                      {translateMetric(m.type)}
                     </option>
                   ))}
                 </select>
-                <div className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1">
-                  <ArrowUpDown className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+                <div className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5">
+                  <ArrowUpDown className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
                   <select
                     aria-label="Sort policies"
                     value={sortBy}
@@ -654,43 +708,41 @@ export function PolicyRegistryClient() {
                     }
                     className="bg-transparent text-xs font-medium text-slate-700 focus:outline-none"
                   >
-                    <option value="createdAt">Newest</option>
-                    <option value="coverageAmount">Highest Coverage</option>
-                    <option value="thresholdValue">Highest Threshold</option>
+                    <option value="createdAt">{t("sortNewest")}</option>
+                    <option value="coverageAmount">{t("sortHighestCoverage")}</option>
+                    <option value="thresholdValue">{t("sortHighestThreshold")}</option>
                   </select>
                 </div>
               </div>
             </div>
-          </div>
 
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             {loading ? (
-              <div className="p-4">
+              <div className="p-5">
                 <ListCardSkeleton rows={3} />
               </div>
             ) : filteredPolicies.length === 0 ? (
               <div className="p-10 text-center text-sm text-slate-500">
-                No parametric policies match the current filters.
+                {t("noPoliciesMatch")}
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <thead className="border-b border-slate-100 bg-slate-50/70 text-[11px] font-medium uppercase tracking-wider text-slate-500">
                     <tr>
-                      <th className="px-4 py-3">Farm &amp; Window</th>
-                      <th className="px-4 py-3">Trigger Rule</th>
-                      <th className="px-4 py-3">Coverage / Premium</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3 text-right">Actions</th>
+                      <th className="whitespace-nowrap px-4 py-3">{t("colFarmWindow")}</th>
+                      <th className="whitespace-nowrap px-4 py-3">{t("colTriggerRule")}</th>
+                      <th className="whitespace-nowrap px-4 py-3">{t("colCoveragePremium")}</th>
+                      <th className="whitespace-nowrap px-4 py-3">{t("colStatus")}</th>
+                      <th className="whitespace-nowrap px-4 py-3 text-right">{t("colActions")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredPolicies.map((policy) => {
                       const meta = getMetricMeta(policy.metricType);
                       return (
-                        <tr key={policy.id} className="hover:bg-slate-50/70">
+                        <tr key={policy.id} className="transition hover:bg-slate-50/80">
                           <td className="px-4 py-3.5">
-                            <div className="font-semibold text-slate-900">{policy.farm.name}</div>
+                            <div className="font-medium text-slate-900">{policy.farm.name}</div>
                             <div className="text-xs text-slate-500">
                               {policy.farm.cropType}
                               {isAdmin ? ` · ${policy.farm.user.name}` : ""}
@@ -700,48 +752,49 @@ export function PolicyRegistryClient() {
                               {new Date(policy.endDate).toLocaleDateString()}
                             </div>
                           </td>
-                          <td className="px-4 py-3.5">
-                            <span className="inline-block rounded bg-slate-100 px-2 py-0.5 font-mono text-xs font-semibold text-slate-700">
+                          <td className="whitespace-nowrap px-4 py-3.5">
+                            <span className="inline-block rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-[11px] font-medium text-slate-700">
                               {policy.metricType}
                             </span>
-                            <div className="mt-1 text-xs font-medium text-slate-800">
+                            <div className="mt-1 text-xs font-medium text-slate-700">
                               ≥ {policy.thresholdValue} {meta.unit}
                             </div>
                           </td>
-                          <td className="px-4 py-3.5">
+                          <td className="whitespace-nowrap px-4 py-3.5">
                             <div className="font-semibold text-slate-900">
                               {formatCurrency(policy.coverageAmount)}
                             </div>
                             <div className="text-xs text-slate-500">
-                              Premium: {formatCurrency(policy.premiumPaid)}
+                              {t("premiumPrefix")} {formatCurrency(policy.premiumPaid)}
                             </div>
                           </td>
-                          <td className="px-4 py-3.5">
+                          <td className="whitespace-nowrap px-4 py-3.5">
                             <span
                               className={cn(
-                                "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold",
-                                STATUS_BADGE[policy.status] ?? "bg-slate-100 text-slate-700"
+                                "inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium",
+                                STATUS_BADGE[policy.status] ??
+                                  "border border-slate-200 bg-slate-100 text-slate-600"
                               )}
                             >
-                              {policy.status}
+                              {translateStatus(policy.status)}
                             </span>
                           </td>
-                          <td className="px-4 py-3.5 text-right">
+                          <td className="whitespace-nowrap px-4 py-3.5 text-right">
                             {policy.status === "ACTIVE" ? (
                               <button
                                 type="button"
                                 onClick={() => handleCancelPolicy(policy)}
-                                className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+                                className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
                               >
-                                <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
-                                Cancel
+                                <XCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                <span>{t("cancelBtn")}</span>
                               </button>
                             ) : (
                               <Link
                                 href="/claims"
-                                className="text-xs font-semibold text-indigo-600 hover:underline"
+                                className="whitespace-nowrap text-xs font-medium text-emerald-700 hover:text-emerald-800 hover:underline"
                               >
-                                View Ledger
+                                {t("viewLedgerLink")}
                               </Link>
                             )}
                           </td>

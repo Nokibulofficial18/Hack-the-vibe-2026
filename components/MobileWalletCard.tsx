@@ -2,14 +2,9 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import {
-  AlertCircle,
-  CheckCircle2,
-  Phone,
-  Save,
-  Smartphone,
-} from "lucide-react";
+import { AlertCircle, CheckCircle2, Phone, Save, Smartphone } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { useTranslation } from "@/lib/i18n";
 import { useToast } from "@/components/ToastProvider";
 import {
   PAYOUT_METHOD_OPTIONS,
@@ -30,6 +25,7 @@ interface FarmerWalletInfo {
 
 export function MobileWalletCard() {
   const { user, isAdmin, getAuthHeaders } = useAuth();
+  const { t } = useTranslation();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -93,9 +89,9 @@ export function MobileWalletCard() {
     setMobileNumber(value);
     if (value.trim().length > 0) {
       const check = validateBdMobileNumber(value);
-      setPhoneError(check.valid ? null : (check.error ?? "Invalid BD mobile number."));
+      setPhoneError(check.valid ? null : t("walletPhoneRequired"));
     } else {
-      setPhoneError("Mobile number is required in +8801XXXXXXXXX format.");
+      setPhoneError(t("walletPhoneRequired"));
     }
   };
 
@@ -103,11 +99,11 @@ export function MobileWalletCard() {
     event.preventDefault();
     const check = validateBdMobileNumber(mobileNumber);
     if (!check.valid) {
-      const errMsg = check.error ?? "Invalid Bangladesh mobile number.";
+      const errMsg = t("walletPhoneRequired");
       setPhoneError(errMsg);
       toast({
         variant: "error",
-        title: "Invalid Bangladesh Mobile Number",
+        title: t("walletInvalidPhoneTitle"),
         description: errMsg,
       });
       return;
@@ -134,9 +130,9 @@ export function MobileWalletCard() {
       };
 
       if (!response.ok) {
-        const msg = data.error ?? "Failed to update payout wallet.";
+        const msg = data.error ?? t("walletUpdateFailedDesc");
         setPhoneError(msg);
-        toast({ variant: "error", title: "Wallet Update Failed", description: msg });
+        toast({ variant: "error", title: t("walletUpdateFailedTitle"), description: msg });
         return;
       }
 
@@ -145,16 +141,16 @@ export function MobileWalletCard() {
       setPhoneError(null);
       toast({
         variant: "success",
-        title: "Mobile Payout Wallet Saved",
-        description: `${data.user?.name ?? user.name} will receive automatic payouts via ${meta.label} (${maskBdMobileNumber(check.normalized)}).`,
+        title: t("walletSavedTitle"),
+        description: `${data.user?.name ?? user.name} → ${meta.label} (${maskBdMobileNumber(check.normalized)})`,
       });
       await loadProfile();
       router.refresh();
     } catch {
       toast({
         variant: "error",
-        title: "Network Error",
-        description: "Unable to save mobile payout wallet.",
+        title: t("networkErrorTitle"),
+        description: t("walletNetworkErrDesc"),
       });
     } finally {
       setSaving(false);
@@ -166,48 +162,41 @@ export function MobileWalletCard() {
   return (
     <section
       aria-labelledby="mobile-wallet-heading"
-      className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+      className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-xs"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
-        <div>
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-900 ring-1 ring-emerald-200">
-            <Smartphone className="h-3.5 w-3.5" aria-hidden="true" />
-            Bangladesh MFS Auto-Disbursement Channel
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+            <Smartphone className="h-4 w-4" aria-hidden="true" />
           </div>
-          <h2 id="mobile-wallet-heading" className="mt-1.5 text-base font-bold text-slate-950">
-            {isAdmin ? "Farmer Mobile Wallet Configuration" : "My Mobile Payout Wallet"}
-          </h2>
-          <p className="mt-0.5 text-xs text-slate-600">
-            Parametric claim payouts are sent automatically to your verified{" "}
-            <strong>bKash</strong>, <strong>Nagad</strong>, or <strong>Rocket</strong> account.
-          </p>
+          <div>
+            <h2 id="mobile-wallet-heading" className="text-sm font-semibold text-slate-900">
+              {isAdmin ? t("adminMobileWallet") : t("myMobileWallet")}
+            </h2>
+            <p className="text-xs text-slate-600">{t("walletSubtitle")}</p>
+          </div>
         </div>
 
-        <span
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold",
-            activeMeta.badgeClass
-          )}
-        >
-          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           {activeMeta.label} · {maskBdMobileNumber(mobileNumber)}
         </span>
       </div>
 
       {loading ? (
-        <p className="py-6 text-center text-xs text-slate-500">Loading wallet settings...</p>
+        <div className="mt-4 h-12 animate-pulse rounded-lg bg-slate-100" />
       ) : (
         <form onSubmit={handleSave} noValidate className="mt-4 space-y-4">
           {isAdmin && farmers.length > 0 && (
-            <div>
-              <label htmlFor="wallet-farmer-select" className="block text-xs font-bold text-slate-800">
-                Select Farmer Profile
+            <div className="max-w-sm">
+              <label htmlFor="wallet-farmer-select" className="block text-xs font-medium text-slate-600">
+                {t("selectFarmerProfile")}
               </label>
               <select
                 id="wallet-farmer-select"
                 value={targetUserId}
                 onChange={(e) => handleSelectFarmer(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 focus:border-emerald-600 focus:outline-none sm:max-w-sm"
+                className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-900 shadow-xs focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/15"
               >
                 {farmers.map((f) => (
                   <option key={f.id} value={f.id}>
@@ -219,15 +208,14 @@ export function MobileWalletCard() {
           )}
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-end">
-            {/* Provider Radio Cards */}
             <div className="lg:col-span-5">
-              <span className="block text-xs font-bold text-slate-800">
-                Mobile Financial Service (MFS)
+              <span className="block text-xs font-medium text-slate-600">
+                {t("mfsProviderLabel")}
               </span>
               <div
                 role="radiogroup"
-                aria-label="Mobile payout provider"
-                className="mt-1.5 grid grid-cols-3 gap-2"
+                aria-label={t("mfsProviderLabel")}
+                className="mt-1.5 grid grid-cols-3 gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50 p-1"
               >
                 {PAYOUT_METHOD_OPTIONS.map((opt) => {
                   const selected = payoutMethod === opt.id;
@@ -239,10 +227,10 @@ export function MobileWalletCard() {
                       aria-checked={selected}
                       onClick={() => setPayoutMethod(opt.id)}
                       className={cn(
-                        "rounded-xl border px-3 py-2 text-center text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600",
+                        "whitespace-nowrap rounded-md py-1.5 text-center text-xs font-medium transition",
                         selected
-                          ? cn("border-transparent shadow-sm", opt.headerBgClass)
-                          : "border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
+                          ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-sm shadow-emerald-600/20"
+                          : "text-slate-600 hover:bg-white hover:text-slate-900"
                       )}
                     >
                       {opt.label}
@@ -252,14 +240,13 @@ export function MobileWalletCard() {
               </div>
             </div>
 
-            {/* Strict BD Phone Input */}
             <div className="lg:col-span-5">
-              <label htmlFor="bd-mobile-number" className="block text-xs font-bold text-slate-800">
-                Bangladesh Mobile Number (+8801XXXXXXXXX)
+              <label htmlFor="bd-mobile-number" className="block text-xs font-medium text-slate-600">
+                {t("bdPhoneLabel")}
               </label>
               <div className="relative mt-1.5">
                 <Phone
-                  className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500"
+                  className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400"
                   aria-hidden="true"
                 />
                 <input
@@ -271,10 +258,10 @@ export function MobileWalletCard() {
                   aria-invalid={Boolean(phoneError)}
                   aria-describedby={phoneError ? "bd-phone-error" : "bd-phone-hint"}
                   className={cn(
-                    "w-full rounded-lg border py-2 pl-9 pr-3 font-mono text-xs font-semibold text-slate-950 focus:outline-none focus:ring-2",
+                    "w-full rounded-lg border py-2 pl-9 pr-3 font-mono text-xs text-slate-900 shadow-xs focus:outline-none focus:ring-2",
                     phoneError
-                      ? "border-rose-500 bg-rose-50/40 focus:border-rose-600 focus:ring-rose-500/25"
-                      : "border-slate-300 focus:border-emerald-600 focus:ring-emerald-600/20"
+                      ? "border-rose-300 bg-rose-50/40 focus:border-rose-500 focus:ring-rose-500/15"
+                      : "border-slate-200 bg-white focus:border-emerald-700 focus:ring-emerald-700/15"
                   )}
                 />
               </div>
@@ -282,27 +269,26 @@ export function MobileWalletCard() {
                 <p
                   id="bd-phone-error"
                   role="alert"
-                  className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-rose-700"
+                  className="mt-1 flex items-center gap-1 text-[11px] font-medium text-rose-600"
                 >
                   <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   {phoneError}
                 </p>
               ) : (
-                <p id="bd-phone-hint" className="mt-1 text-[11px] text-slate-600">
-                  Valid prefixes: +88013–+88019 · Receipt preview: {maskBdMobileNumber(mobileNumber)}
+                <p id="bd-phone-hint" className="mt-1 text-[11px] text-slate-500">
+                  {t("maskedReceiptPreview", { phone: maskBdMobileNumber(mobileNumber) })}
                 </p>
               )}
             </div>
 
-            {/* Save Button */}
             <div className="lg:col-span-2">
               <button
                 type="submit"
                 disabled={saving}
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-700 disabled:opacity-50"
+                className="inline-flex w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-3.5 py-2 text-xs font-medium text-white shadow-sm shadow-emerald-600/20 transition hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50"
               >
-                <Save className="h-3.5 w-3.5" aria-hidden="true" />
-                {saving ? "Saving..." : "Save Wallet"}
+                <Save className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span>{saving ? t("saving") : t("saveWallet")}</span>
               </button>
             </div>
           </div>

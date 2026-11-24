@@ -2,20 +2,20 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  Area,
   Bar,
   BarChart,
   CartesianGrid,
   ComposedChart,
   Legend,
-  Line,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import { BarChart3, TrendingUp } from "lucide-react";
 import { getMetricMeta, getSevereThresholdCutoff } from "@/lib/domain";
+import { useTranslation } from "@/lib/i18n";
 import { formatCurrency } from "@/lib/utils";
 import type { MapFarmItem } from "@/components/BangladeshRiskMap";
 
@@ -35,12 +35,8 @@ interface AdminAnalyticsChartsProps {
 }
 
 function formatCompactTaka(value: number): string {
-  if (value >= 100000) {
-    return `৳${(value / 100000).toFixed(1)}L`;
-  }
-  if (value >= 1000) {
-    return `৳${Math.round(value / 1000)}k`;
-  }
+  if (value >= 100000) return `৳${(value / 100000).toFixed(1)}L`;
+  if (value >= 1000) return `৳${Math.round(value / 1000)}k`;
   return `৳${value}`;
 }
 
@@ -49,6 +45,7 @@ export function AdminAnalyticsCharts({
   farms,
   isAdmin,
 }: AdminAnalyticsChartsProps) {
+  const { t } = useTranslation();
   const [selectedFarmId, setSelectedFarmId] = useState<string>(farms[0]?.id ?? "");
 
   useEffect(() => {
@@ -59,7 +56,6 @@ export function AdminAnalyticsCharts({
 
   const activeFarm = farms.find((f) => f.id === selectedFarmId) ?? farms[0] ?? null;
 
-  // Pick the primary weather policy (preferring RAINFALL_MAX or TEMP_MAX for threshold reference line)
   const primaryPolicy = useMemo(() => {
     if (!activeFarm || activeFarm.policies.length === 0) return null;
     return (
@@ -85,47 +81,50 @@ export function AdminAnalyticsCharts({
       {/* Chart 1: Total Coverage vs. Payouts by District (Bar Chart in ৳) */}
       <section
         aria-labelledby="district-bar-chart-heading"
-        className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+        className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-xs"
       >
-        <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3.5">
           <div>
-            <div className="inline-flex items-center gap-1.5 rounded-full bg-[#065F46]/10 px-2.5 py-0.5 text-[11px] font-bold text-[#065F46]">
-              <BarChart3 className="h-3.5 w-3.5" aria-hidden="true" />
-              {isAdmin ? "Portfolio Exposure Analytics (BDT)" : "Your District Exposure (BDT)"}
-            </div>
-            <h2
-              id="district-bar-chart-heading"
-              className="mt-1 text-base font-bold text-slate-950"
-            >
-              Total Coverage vs. Payouts by District (৳)
+            <h2 id="district-bar-chart-heading" className="text-sm font-semibold text-slate-900">
+              {t("chartDistrictTitle")}
             </h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {isAdmin ? t("chartDistrictSubAdmin") : t("chartDistrictSubFarmer")}
+            </p>
           </div>
-          <span className="rounded-md bg-slate-100 px-2 py-1 font-mono text-[11px] font-semibold text-slate-700">
-            {byDistrict.length} District{byDistrict.length === 1 ? "" : "s"}
+          <span className="whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium text-slate-600">
+            {t("districtCountBadge", { count: byDistrict.length })}
           </span>
         </div>
 
-        <div className="mt-4 h-60 w-full">
+        <div className="mt-4 h-56 w-full">
           {byDistrict.length === 0 ? (
             <div className="flex h-full items-center justify-center text-xs text-slate-500">
-              No district coverage data available yet.
+              {t("noDistrictChartData")}
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={byDistrict}
-                margin={{ top: 8, right: 12, left: 4, bottom: 4 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+              <BarChart data={byDistrict} margin={{ top: 8, right: 12, left: 4, bottom: 4 }}>
+                <defs>
+                  <linearGradient id="coverageBarGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#059669" stopOpacity={0.95} />
+                    <stop offset="100%" stopColor="#0D9488" stopOpacity={0.75} />
+                  </linearGradient>
+                  <linearGradient id="payoutBarGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#F59E0B" stopOpacity={0.95} />
+                    <stop offset="100%" stopColor="#EA580C" stopOpacity={0.75} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
                 <XAxis
                   dataKey="district"
-                  tick={{ fill: "#334155", fontSize: 11, fontWeight: 600 }}
-                  axisLine={{ stroke: "#CBD5E1" }}
+                  tick={{ fill: "#475569", fontSize: 11, fontWeight: 500 }}
+                  axisLine={{ stroke: "#E2E8F0" }}
                   tickLine={false}
                 />
                 <YAxis
                   tickFormatter={formatCompactTaka}
-                  tick={{ fill: "#475569", fontSize: 11, fontWeight: 600 }}
+                  tick={{ fill: "#64748B", fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                   width={54}
@@ -136,30 +135,29 @@ export function AdminAnalyticsCharts({
                     String(name),
                   ]}
                   contentStyle={{
-                    backgroundColor: "#0F172A",
-                    borderColor: "#1E293B",
-                    borderRadius: "12px",
-                    color: "#F8FAFC",
+                    backgroundColor: "#FFFFFF",
+                    borderColor: "#E2E8F0",
+                    borderRadius: "10px",
+                    color: "#0F172A",
                     fontSize: "12px",
+                    boxShadow: "0 4px 12px rgba(15, 23, 42, 0.08)",
                   }}
-                  labelStyle={{ color: "#6EE7B7", fontWeight: 700, marginBottom: "4px" }}
+                  labelStyle={{ color: "#0F172A", fontWeight: 600, marginBottom: "4px" }}
                 />
-                <Legend
-                  wrapperStyle={{ fontSize: "11px", fontWeight: 600, paddingTop: "6px" }}
-                />
+                <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "6px" }} />
                 <Bar
                   dataKey="coverage"
-                  name="Total Coverage (৳)"
-                  fill="#065F46"
+                  name={t("legendCoverage")}
+                  fill="url(#coverageBarGradient)"
                   radius={[6, 6, 0, 0]}
-                  maxBarSize={42}
+                  maxBarSize={36}
                 />
                 <Bar
                   dataKey="payouts"
-                  name="Payouts Issued (৳)"
-                  fill="#D97706"
+                  name={t("legendPayouts")}
+                  fill="url(#payoutBarGradient)"
                   radius={[6, 6, 0, 0]}
-                  maxBarSize={42}
+                  maxBarSize={36}
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -167,32 +165,29 @@ export function AdminAnalyticsCharts({
         </div>
       </section>
 
-      {/* Chart 2: 7-Day Rainfall & Temperature Trend vs. Policy Trigger Threshold Line */}
+      {/* Chart 2: 7-Day Rainfall & Temperature Trend with Smooth SVG Area Gradients */}
       <section
         aria-labelledby="trend-chart-heading"
-        className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+        className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-xs"
       >
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
           <div>
-            <div className="inline-flex items-center gap-1.5 rounded-full bg-sky-100 px-2.5 py-0.5 text-[11px] font-bold text-sky-900">
-              <TrendingUp className="h-3.5 w-3.5" aria-hidden="true" />
-              7-Day Open-Meteo Forecast vs. Trigger Threshold
-            </div>
-            <h2 id="trend-chart-heading" className="mt-1 text-base font-bold text-slate-950">
-              7-Day Rainfall &amp; Temperature Trend
+            <h2 id="trend-chart-heading" className="text-sm font-semibold text-slate-900">
+              {t("chartTrendTitle")}
             </h2>
+            <p className="mt-0.5 text-xs text-slate-500">{t("chartTrendSubtitle")}</p>
           </div>
 
           {farms.length > 0 && (
             <div>
               <label htmlFor="trend-farm-select" className="sr-only">
-                Select district plot for 7-day weather trend
+                {t("chartTrendTitle")}
               </label>
               <select
                 id="trend-farm-select"
                 value={selectedFarmId}
                 onChange={(e) => setSelectedFarmId(e.target.value)}
-                className="rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:border-[#065F46] focus:outline-none"
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-xs focus:border-emerald-700 focus:outline-none"
               >
                 {farms.map((farm) => (
                   <option key={farm.id} value={farm.id}>
@@ -205,88 +200,97 @@ export function AdminAnalyticsCharts({
         </div>
 
         {primaryPolicy && primaryMeta && (
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold">
-            <span className="rounded-md bg-rose-50 px-2 py-0.5 text-rose-900 ring-1 ring-rose-200">
-              Policy Trigger ({primaryPolicy.metricType}): {primaryPolicy.thresholdValue}
-              {primaryMeta.unit} (50% Moderate)
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-medium">
+            <span className="whitespace-nowrap rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-rose-700">
+              {t("triggerLabel")} ({primaryPolicy.metricType}): {primaryPolicy.thresholdValue}
+              {primaryMeta.unit}
             </span>
             {severeCutoff !== null && (
-              <span className="rounded-md bg-slate-100 px-2 py-0.5 text-slate-800">
-                Severe 100% Cutoff: {severeCutoff}
+              <span className="whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-slate-600">
+                {t("severe100Label")}: {severeCutoff}
                 {primaryMeta.unit}
               </span>
             )}
           </div>
         )}
 
-        <div className="mt-3 h-64 w-full">
+        <div className="mt-3 h-60 w-full">
           {trendData.length === 0 ? (
             <div className="flex h-full items-center justify-center text-xs text-slate-500">
-              Sync Open-Meteo weather to display the 7-day meteorological trend.
+              {t("noTrendData")}
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart
-                data={trendData}
-                margin={{ top: 12, right: 12, left: 0, bottom: 4 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+              <ComposedChart data={trendData} margin={{ top: 12, right: 12, left: 0, bottom: 4 }}>
+                <defs>
+                  <linearGradient id="rainAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#0284C7" stopOpacity={0.32} />
+                    <stop offset="95%" stopColor="#0284C7" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="tempAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.28} />
+                    <stop offset="95%" stopColor="#F59E0B" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
                 <XAxis
                   dataKey="dayLabel"
-                  tick={{ fill: "#334155", fontSize: 11, fontWeight: 600 }}
-                  axisLine={{ stroke: "#CBD5E1" }}
+                  tick={{ fill: "#475569", fontSize: 11 }}
+                  axisLine={{ stroke: "#E2E8F0" }}
                   tickLine={false}
                 />
                 <YAxis
                   yAxisId="rain"
                   orientation="left"
                   unit="mm"
-                  tick={{ fill: "#0369A1", fontSize: 11, fontWeight: 600 }}
+                  tick={{ fill: "#64748B", fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
-                  width={48}
+                  width={46}
                 />
                 <YAxis
                   yAxisId="temp"
                   orientation="right"
                   unit="°C"
                   domain={[20, 46]}
-                  tick={{ fill: "#C2410C", fontSize: 11, fontWeight: 600 }}
+                  tick={{ fill: "#64748B", fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                   width={42}
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "#0F172A",
-                    borderColor: "#1E293B",
-                    borderRadius: "12px",
-                    color: "#F8FAFC",
+                    backgroundColor: "#FFFFFF",
+                    borderColor: "#E2E8F0",
+                    borderRadius: "10px",
+                    color: "#0F172A",
                     fontSize: "12px",
+                    boxShadow: "0 4px 12px rgba(15, 23, 42, 0.08)",
                   }}
-                  labelStyle={{ color: "#6EE7B7", fontWeight: 700, marginBottom: "4px" }}
+                  labelStyle={{ color: "#0F172A", fontWeight: 600, marginBottom: "4px" }}
                 />
-                <Legend
-                  wrapperStyle={{ fontSize: "11px", fontWeight: 600, paddingTop: "6px" }}
-                />
-                <Bar
+                <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "6px" }} />
+                <Area
                   yAxisId="rain"
+                  type="monotone"
                   dataKey="rainMm"
-                  name="Rainfall (mm)"
-                  fill="#0284C7"
-                  fillOpacity={0.82}
-                  radius={[5, 5, 0, 0]}
-                  maxBarSize={28}
+                  name={t("legendRainfall")}
+                  stroke="#0284C7"
+                  strokeWidth={2}
+                  fill="url(#rainAreaGradient)"
+                  dot={{ r: 3, fill: "#0284C7", stroke: "#FFFFFF", strokeWidth: 1.5 }}
+                  activeDot={{ r: 5 }}
                 />
-                <Line
+                <Area
                   yAxisId="temp"
                   type="monotone"
                   dataKey="tempMaxC"
-                  name="Max Temp (°C)"
-                  stroke="#EA580C"
-                  strokeWidth={2.5}
-                  dot={{ r: 3.5, fill: "#EA580C", stroke: "#FFFFFF", strokeWidth: 1.5 }}
-                  activeDot={{ r: 5.5 }}
+                  name={t("legendMaxTemp")}
+                  stroke="#D97706"
+                  strokeWidth={2}
+                  fill="url(#tempAreaGradient)"
+                  dot={{ r: 3, fill: "#D97706", stroke: "#FFFFFF", strokeWidth: 1.5 }}
+                  activeDot={{ r: 5 }}
                 />
                 {primaryPolicy &&
                   (primaryPolicy.metricType === "RAINFALL_MAX" ||
@@ -294,15 +298,15 @@ export function AdminAnalyticsCharts({
                     <ReferenceLine
                       yAxisId={isTempPrimary ? "temp" : "rain"}
                       y={primaryPolicy.thresholdValue}
-                      stroke="#DC2626"
-                      strokeWidth={2}
+                      stroke="#E11D48"
+                      strokeWidth={1.5}
                       strokeDasharray="5 4"
                       label={{
-                        value: `Trigger ${primaryPolicy.thresholdValue}${primaryMeta?.unit ?? ""}`,
+                        value: `${t("triggerLabel")} ${primaryPolicy.thresholdValue}${primaryMeta?.unit ?? ""}`,
                         position: "insideTopRight",
-                        fill: "#DC2626",
+                        fill: "#E11D48",
                         fontSize: 10,
-                        fontWeight: 700,
+                        fontWeight: 600,
                       }}
                     />
                   )}

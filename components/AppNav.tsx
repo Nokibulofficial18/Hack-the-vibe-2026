@@ -9,18 +9,24 @@ import {
   MapPin,
   ReceiptText,
 } from "lucide-react";
+import { useLanguage, type TranslationKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-const NAV_ITEMS = [
-  { href: "/", label: "Overview", icon: LayoutDashboard },
-  { href: "/farms", label: "Farms", icon: MapPin },
-  { href: "/policies", label: "Policies", icon: FileCheck2 },
-  { href: "/dashboard", label: "Weather Monitor", icon: CloudSun },
-  { href: "/claims", label: "Claim Ledger", icon: ReceiptText },
-] as const;
+const NAV_ITEMS: ReadonlyArray<{
+  href: string;
+  labelKey: TranslationKey;
+  icon: typeof LayoutDashboard;
+}> = [
+  { href: "/", labelKey: "navOverview", icon: LayoutDashboard },
+  { href: "/farms", labelKey: "navFarms", icon: MapPin },
+  { href: "/policies", labelKey: "navPolicies", icon: FileCheck2 },
+  { href: "/dashboard", labelKey: "navMonitor", icon: CloudSun },
+  { href: "/claims", labelKey: "navClaims", icon: ReceiptText },
+];
 
 export function AppNav() {
   const pathname = usePathname();
+  const { t } = useLanguage();
 
   return (
     <nav
@@ -47,7 +53,7 @@ export function AppNav() {
             )}
           >
             <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-            {item.label}
+            {t(item.labelKey)}
           </Link>
         );
       })}

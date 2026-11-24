@@ -2,27 +2,45 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { RotateCcw, ShieldCheck, Sprout, UserCheck } from "lucide-react";
+import { Globe, RotateCcw, ShieldCheck, Sprout, UserCheck } from "lucide-react";
 import { useAuth, type UserRole } from "@/lib/auth";
+import { useLanguage, type Language } from "@/lib/i18n";
 import { useToast } from "@/components/ToastProvider";
 import { cn } from "@/lib/utils";
 
 export function RoleSwitcher() {
   const { user, users, isAdmin, switchRole, switchUser, getAuthHeaders } = useAuth();
+  const { lang, setLang, t } = useLanguage();
   const { toast } = useToast();
   const router = useRouter();
   const [resetting, setResetting] = useState(false);
+
+  const handleLanguageChange = (nextLang: Language) => {
+    if (nextLang === lang) return;
+    setLang(nextLang);
+    toast({
+      variant: "info",
+      title:
+        nextLang === "bn"
+          ? "ভাষা বাংলায় পরিবর্তন করা হয়েছে"
+          : "Language switched to English",
+      description:
+        nextLang === "bn"
+          ? "নেভিগেশন, পলিসি স্ট্যাটাস এবং পেআউট বিজ্ঞপ্তি এখন বাংলায় দেখাচ্ছে।"
+          : "Navigation, policy statuses, and payout notifications are now in English.",
+    });
+  };
 
   const handleRoleSwitch = (role: UserRole) => {
     if (role === user.role) return;
     switchRole(role);
     toast({
       variant: "info",
-      title: `Switched to ${role === "ADMIN" ? "Admin" : "Farmer"} View`,
+      title: role === "ADMIN" ? t("roleSwitchedAdmin") : t("roleSwitchedFarmer"),
       description:
         role === "ADMIN"
-          ? "Global risk controls, A06 fault injector, and A07 workflow runner enabled."
-          : "Scoped strictly to the active farmer's plots, policies, and payouts.",
+          ? "Global risk controls, Judge Test Panel, A06 fault injector, and A07 workflow runner enabled."
+          : "Scoped strictly to the active farmer's plots, policies, and MFS payouts.",
     });
     router.refresh();
   };
@@ -64,10 +82,9 @@ export function RoleSwitcher() {
       toast({
         variant: "success",
         title: "Demo Data Reset Complete",
-        description: data.message ?? "Restored 3 farms, 4 active policies, and baseline balances.",
+        description: data.message ?? "Restored Bangladesh demo dataset.",
       });
       router.refresh();
-      // Force reload so client-fetched tables also immediately reflect the reset state
       window.location.reload();
     } catch {
       toast({
@@ -83,8 +100,43 @@ export function RoleSwitcher() {
   return (
     <div
       className="flex flex-wrap items-center gap-2"
-      aria-label="Mock Role and Persona Switcher"
+      aria-label="Language, Role, and Persona Controls"
     >
+      {/* English / বাংলা Language Toggle */}
+      <div
+        role="group"
+        aria-label="Language Toggle (English or Bangla)"
+        className="inline-flex items-center rounded-lg border border-slate-300 bg-slate-100 p-1"
+      >
+        <Globe className="ml-1.5 mr-1 h-3.5 w-3.5 text-slate-600" aria-hidden="true" />
+        <button
+          type="button"
+          onClick={() => handleLanguageChange("en")}
+          aria-pressed={lang === "en"}
+          className={cn(
+            "rounded-md px-2 py-1 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#065F46]",
+            lang === "en"
+              ? "bg-[#065F46] text-white shadow-sm"
+              : "text-slate-700 hover:text-slate-950"
+          )}
+        >
+          EN
+        </button>
+        <button
+          type="button"
+          onClick={() => handleLanguageChange("bn")}
+          aria-pressed={lang === "bn"}
+          className={cn(
+            "rounded-md px-2 py-1 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#065F46]",
+            lang === "bn"
+              ? "bg-[#065F46] text-white shadow-sm"
+              : "text-slate-700 hover:text-slate-950"
+          )}
+        >
+          বাংলা
+        </button>
+      </div>
+
       {/* Fast Farmer / Admin Toggle */}
       <div
         role="group"
@@ -98,12 +150,12 @@ export function RoleSwitcher() {
           className={cn(
             "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600",
             user.role === "FARMER"
-              ? "bg-emerald-700 text-white shadow-sm"
+              ? "bg-[#065F46] text-white shadow-sm"
               : "text-slate-700 hover:text-slate-950"
           )}
         >
           <Sprout className="h-3.5 w-3.5" aria-hidden="true" />
-          Farmer
+          {t("roleFarmer")}
         </button>
         <button
           type="button"
@@ -117,7 +169,7 @@ export function RoleSwitcher() {
           )}
         >
           <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-          Admin
+          {t("roleAdmin")}
         </button>
       </div>
 
@@ -134,11 +186,11 @@ export function RoleSwitcher() {
           id="persona-select"
           value={user.id}
           onChange={(e) => handleUserSwitch(e.target.value)}
-          className="rounded-lg border border-slate-300 bg-white py-1.5 pl-8 pr-7 text-xs font-semibold text-slate-800 shadow-sm transition hover:border-slate-400 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/25"
+          className="rounded-lg border border-slate-300 bg-white py-1.5 pl-8 pr-7 text-xs font-semibold text-slate-800 shadow-sm transition hover:border-slate-400 focus:border-[#065F46] focus:outline-none focus:ring-2 focus:ring-[#065F46]/25"
         >
           {users.map((account) => (
             <option key={account.id} value={account.id}>
-              {account.name} ({account.role})
+              {account.name} ({account.role === "ADMIN" ? t("roleAdmin") : t("roleFarmer")})
             </option>
           ))}
         </select>
@@ -157,7 +209,7 @@ export function RoleSwitcher() {
             className={cn("h-3.5 w-3.5", resetting && "animate-spin")}
             aria-hidden="true"
           />
-          {resetting ? "Resetting..." : "Demo Reset"}
+          {resetting ? t("resetting") : t("demoReset")}
         </button>
       )}
     </div>
