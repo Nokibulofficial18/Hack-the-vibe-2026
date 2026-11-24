@@ -1,0 +1,103 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  FARMER
+  ADMIN
+}
+
+enum PolicyStatus {
+  ACTIVE
+  EXPIRED
+  CLAIMED
+  CANCELLED
+}
+
+enum ClaimStatus {
+  TRIGGERED
+  VALIDATED
+  CALCULATED
+  RESERVED
+  DISBURSED
+  FAILED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  role      Role     @default(FARMER)
+  balance   Float    @default(0.0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  farms     Farm[]
+}
+
+model Farm {
+  id           String   @id @default(uuid())
+  name         String
+  latitude     Float
+  longitude    Float
+  cropType     String
+  sizeHectares Float
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  policies     Policy[]
+  createdAt    DateTime @default(now())
+}
+
+model Policy {
+  id             String       @id @default(uuid())
+  farmId         String
+  farm           Farm         @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  metricType     String       // e.g., "RAINFALL_MAX", "DROUGHT_DAYS", "TEMP_MAX"
+  thresholdValue Float        // e.g., 100.0 (mm of rain)
+  coverageAmount Float        // Maximum payout limit
+  premiumPaid    Float
+  startDate      DateTime
+  endDate        DateTime
+  status         PolicyStatus @default(ACTIVE)
+  claims         Claim[]
+  createdAt      DateTime     @default(now())
+}
+
+model Claim {
+  id             String        @id @default(uuid())
+  policyId       String
+  policy         Policy        @relation(fields: [policyId], references: [id])
+  idempotencyKey String        @unique // Prevents duplicate payouts
+  triggerValue   Float         // Actual weather value observed
+  payoutAmount   Float         @default(0.0)
+  status         ClaimStatus   @default(TRIGGERED)
+  currentStep    Int           @default(1) // Track workflow progress (1 to 5)
+  failureReason  String?
+  workflowLogs   WorkflowLog[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model WorkflowLog {
+  id        String   @id @default(uuid())
+  claimId   String
+  claim     Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  stepName  String
+  status    String   // "SUCCESS", "FAILED", "RETRIED"
+  details   String
+  timestamp DateTime @default(now())
+}
+
+model WeatherCache {
+  id          String   @id @default(uuid())
+  latitude    Float
+  longitude   Float
+  weatherData String   // JSON stringified payload
+  fetchedAt   DateTime @default(now())
+
+  @@index([latitude, longitude])
+}
