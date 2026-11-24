@@ -1,6 +1,14 @@
-import { ClaimStatus, PolicyStatus, type Prisma } from "@prisma/client";
+import { ClaimStatus, PayoutMethod, PolicyStatus, type Prisma } from "@prisma/client";
 import prisma from "./prisma";
-import { calculateParametricPayout, getMetricMeta } from "./domain";
+import {
+  evaluateTieredPayout,
+  generateMfsTransactionId,
+  getMetricMeta,
+  getPayoutMethodMeta,
+  maskBdMobileNumber,
+  type PayoutMethodType,
+} from "./domain";
+import { formatCurrency } from "./utils";
 
 export const WORKFLOW_STEPS = [
   {
@@ -22,7 +30,7 @@ export const WORKFLOW_STEPS = [
     name: "PAYOUT_CALCULATED",
     label: "Payout Calculated",
     claimStatus: ClaimStatus.CALCULATED,
-    description: "Compute severity-tiered payout capped at maximum policy coverage.",
+    description: "Apply tiered breach rules: Moderate (50% coverage) or Severe (100% coverage).",
   },
   {
     step: 4,
@@ -36,7 +44,8 @@ export const WORKFLOW_STEPS = [
     name: "DISBURSEMENT_ISSUED",
     label: "Disbursement Issued",
     claimStatus: ClaimStatus.DISBURSED,
-    description: "Debit insurer reserve, credit farmer wallet, and finalize CLAIMED state.",
+    description:
+      "Send instant bKash/Nagad/Rocket payout, credit wallet, and issue digital receipt.",
   },
 ] as const;
 
@@ -54,6 +63,8 @@ const claimWithDetailsInclude = {
               name: true,
               email: true,
               balance: true,
+              payoutMethod: true,
+              mobileNumber: true,
             },
           },
         },
@@ -105,10 +116,6 @@ async function fetchHydratedClaim(claimId: string): Promise<HydratedClaim> {
   return claim;
 }
 
-/**
- * Executes Steps 4 (FUNDS_RESERVED) and 5 (DISBURSEMENT_ISSUED) with strict
- * idempotency safeguards and transactional rollback on Step 4 failure.
- */
 async function executeSettlementSteps(
   claimId: string,
   options: {
@@ -119,7 +126,6 @@ async function executeSettlementSteps(
 ): Promise<WorkflowExecutionResult> {
   const existing = await fetchHydratedClaim(claimId);
 
-  // Strict Idempotency Guard: never re-execute steps 4 & 5 on a disbursed claim
   if (existing.status === ClaimStatus.DISBURSED || existing.currentStep >= 5) {
     return {
       outcome: "DUPLICATE_BLOCKED",
@@ -127,11 +133,13 @@ async function executeSettlementSteps(
       stepsExecuted: options.stepsExecuted,
       resumedFromStep: null,
       duplicateBlocked: true,
-      message: `Idempotency safeguard active: Claim ${existing.idempotencyKey} was already DISBURSED ($${existing.payoutAmount.toFixed(2)}). Duplicate payout prevented.`,
+      message: `Idempotency safeguard active: Claim ${existing.idempotencyKey} was already DISBURSED (${formatCurrency(existing.payoutAmount)} via ${getPayoutMethodMeta(existing.payoutMethod).label}). Duplicate payout prevented.`,
     };
   }
 
   const resumedFromStep = options.isResume ? existing.currentStep + 1 : null;
+  const farmerWallet = existing.policy.farm.user;
+  const walletMeta = getPayoutMethodMeta(farmerWallet.payoutMethod);
 
   // --- STEP 4: FUNDS_RESERVED ---
   if (existing.currentStep < 4) {
@@ -167,15 +175,13 @@ async function executeSettlementSteps(
 
         if (insurerAdmin.balance < lockedClaim.payoutAmount) {
           throw new Error(
-            `INSUFFICIENT_RESERVE_POOL: Available $${insurerAdmin.balance.toFixed(2)} < required $${lockedClaim.payoutAmount.toFixed(2)}`
+            `INSUFFICIENT_RESERVE_POOL: Available ${formatCurrency(insurerAdmin.balance)} < required ${formatCurrency(lockedClaim.payoutAmount)}`
           );
         }
 
-        // Simulated Mid-Workflow Failure at Step 4 (A07-TC2):
-        // Throwing inside prisma.$transaction rolls back the reservation atomically.
         if (options.simulateStep4Failure) {
           throw new Error(
-            "SIMULATED_STEP_4_FAILURE: Liquidity pool lock timeout during fund reservation. Transaction rolled back; $0.00 disbursed."
+            `SIMULATED_STEP_4_FAILURE: Liquidity pool lock timeout during ${walletMeta.label} fund reservation. Transaction rolled back; ${formatCurrency(0)} disbursed.`
           );
         }
 
@@ -193,7 +199,7 @@ async function executeSettlementSteps(
             claimId: lockedClaim.id,
             stepName: "FUNDS_RESERVED",
             status: options.isResume ? "RETRIED" : "SUCCESS",
-            details: `${options.isResume ? "Resumed from Step 4: " : ""}Reserved $${lockedClaim.payoutAmount.toFixed(2)} from insurer pool (${insurerAdmin.email}) under Idempotency Key ${lockedClaim.idempotencyKey}.`,
+            details: `${options.isResume ? "Resumed from Step 4: " : ""}Reserved ${formatCurrency(lockedClaim.payoutAmount)} from insurer pool for ${walletMeta.label} transfer (${maskBdMobileNumber(farmerWallet.mobileNumber)}) under Idempotency Key ${lockedClaim.idempotencyKey}.`,
           },
         });
       });
@@ -215,7 +221,6 @@ async function executeSettlementSteps(
         };
       }
 
-      // Clean failure persistence: keep claim paused at Step 3 (CALCULATED) with zero funds moved
       await prisma.$transaction([
         prisma.claim.update({
           where: { id: existing.id },
@@ -244,13 +249,12 @@ async function executeSettlementSteps(
         stepsExecuted: options.stepsExecuted,
         resumedFromStep,
         duplicateBlocked: false,
-        message:
-          "Steps 1–3 completed. Step 4 (FUNDS_RESERVED) failed and rolled back cleanly — claim paused at CALCULATED (Step 3) with $0.00 disbursed. Click 'Resume Workflow' to recover from Step 4.",
+        message: `Steps 1–3 completed. Step 4 (FUNDS_RESERVED) failed and rolled back cleanly — claim paused at CALCULATED (Step 3) with ${formatCurrency(0)} disbursed. Click 'Resume Workflow' to recover from Step 4.`,
       };
     }
   }
 
-  // --- STEP 5: DISBURSEMENT_ISSUED ---
+  // --- STEP 5: DISBURSEMENT_ISSUED (Simulated bKash / Nagad / Rocket Settlement + Receipt) ---
   const settledClaim = await prisma.$transaction(async (tx) => {
     const lockedClaim = await tx.claim.findUnique({
       where: { id: existing.id },
@@ -270,7 +274,6 @@ async function executeSettlementSteps(
       throw new Error("CLAIM_NOT_FOUND");
     }
 
-    // Final transactional double-payout check
     if (
       lockedClaim.status === ClaimStatus.DISBURSED ||
       lockedClaim.workflowLogs.length > 0
@@ -290,8 +293,15 @@ async function executeSettlementSteps(
       });
     }
 
+    const beneficiary = lockedClaim.policy.farm.user;
+    const payoutMethod = (beneficiary.payoutMethod ?? PayoutMethod.BKASH) as PayoutMethodType;
+    const mfsMeta = getPayoutMethodMeta(payoutMethod);
+    const transactionId = generateMfsTransactionId(payoutMethod);
+    const disbursedAt = new Date();
+    const maskedPhone = maskBdMobileNumber(beneficiary.mobileNumber);
+
     await tx.user.update({
-      where: { id: lockedClaim.policy.farm.userId },
+      where: { id: beneficiary.id },
       data: { balance: { increment: lockedClaim.payoutAmount } },
     });
 
@@ -306,6 +316,10 @@ async function executeSettlementSteps(
         status: ClaimStatus.DISBURSED,
         currentStep: 5,
         failureReason: null,
+        payoutMethod: beneficiary.payoutMethod,
+        recipientPhone: beneficiary.mobileNumber,
+        transactionId,
+        disbursedAt,
       },
     });
 
@@ -314,11 +328,11 @@ async function executeSettlementSteps(
         claimId: lockedClaim.id,
         stepName: "DISBURSEMENT_ISSUED",
         status: "SUCCESS",
-        details: `Debited $${lockedClaim.payoutAmount.toFixed(2)} from insurer pool, credited ${lockedClaim.policy.farm.user.name} (${lockedClaim.policy.farm.user.email}), and marked policy CLAIMED.`,
+        details: `Instant ${mfsMeta.label} payout of ${formatCurrency(lockedClaim.payoutAmount)} sent to ${beneficiary.name} (${maskedPhone}). Txn ID: ${transactionId}. Policy marked CLAIMED.`,
       },
     });
 
-    return { alreadyDisbursed: false as const };
+    return { alreadyDisbursed: false as const, transactionId, mfsLabel: mfsMeta.label };
   });
 
   const finalClaim = await fetchHydratedClaim(existing.id);
@@ -343,16 +357,11 @@ async function executeSettlementSteps(
     resumedFromStep,
     duplicateBlocked: false,
     message: options.isResume
-      ? `Workflow resumed directly at Step 4 and completed Step 5 without re-running Steps 1–3. Disbursed $${finalClaim.payoutAmount.toFixed(2)} to ${finalClaim.policy.farm.user.name}.`
-      : `All 5 parametric workflow steps succeeded. Disbursed $${finalClaim.payoutAmount.toFixed(2)} to ${finalClaim.policy.farm.user.name}.`,
+      ? `Workflow resumed directly at Step 4 and completed Step 5 via ${settledClaim.mfsLabel} (Txn: ${settledClaim.transactionId}). Disbursed ${formatCurrency(finalClaim.payoutAmount)} to ${finalClaim.policy.farm.user.name}.`
+      : `All 5 parametric workflow steps succeeded. Disbursed ${formatCurrency(finalClaim.payoutAmount)} (${finalClaim.severityTier} ${finalClaim.payoutPercentage}% tier) via ${settledClaim.mfsLabel} (Txn: ${settledClaim.transactionId}).`,
   };
 }
 
-/**
- * Advanced Challenge A07: Executes the 5-step parametric claim pipeline:
- * Step 1: EVENT_DETECTED -> Step 2: POLICY_VALIDATED -> Step 3: PAYOUT_CALCULATED
- * -> Step 4: FUNDS_RESERVED -> Step 5: DISBURSEMENT_ISSUED
- */
 export async function executeParametricClaimWorkflow(
   input: ExecuteWorkflowInput
 ): Promise<WorkflowExecutionResult> {
@@ -373,7 +382,6 @@ export async function executeParametricClaimWorkflow(
   const metricMeta = getMetricMeta(policy.metricType);
   const idempotencyKey = buildIdempotencyKey(policy.id, input.triggerDate);
 
-  // Check Idempotency Key BEFORE creating a new claim or moving funds
   const existingByKey = await prisma.claim.findUnique({
     where: { idempotencyKey },
     include: claimWithDetailsInclude,
@@ -387,17 +395,15 @@ export async function executeParametricClaimWorkflow(
         stepsExecuted: [],
         resumedFromStep: null,
         duplicateBlocked: true,
-        message: `Duplicate payout blocked by idempotency key (${idempotencyKey}). Claim already settled for $${existingByKey.payoutAmount.toFixed(2)}.`,
+        message: `Duplicate payout blocked by idempotency key (${idempotencyKey}). Claim already settled for ${formatCurrency(existingByKey.payoutAmount)}.`,
       };
     }
 
-    // Existing claim is paused (e.g. paused at Step 3 after Step 4 failure) -> resume safely
     return resumeParametricClaimWorkflow(existingByKey.id, {
       simulateStep4Failure,
     });
   }
 
-  // Step 1 pre-check: Weather threshold breach detection
   if (triggerValue < policy.thresholdValue) {
     return {
       outcome: "NOT_TRIGGERED",
@@ -488,13 +494,13 @@ export async function executeParametricClaimWorkflow(
   ]);
   stepsExecuted.push("POLICY_VALIDATED");
 
-  // --- STEP 3: PAYOUT_CALCULATED ---
-  const payoutAmount = calculateParametricPayout(
+  // --- STEP 3: PAYOUT_CALCULATED (M04 Tiered Parametric Rules: 50% Moderate / 100% Severe) ---
+  const tierEval = evaluateTieredPayout(
+    policy.metricType,
     policy.coverageAmount,
     triggerValue,
     policy.thresholdValue
   );
-  const severityRatio = Number((triggerValue / policy.thresholdValue).toFixed(2));
 
   await prisma.$transaction([
     prisma.claim.update({
@@ -502,7 +508,9 @@ export async function executeParametricClaimWorkflow(
       data: {
         status: ClaimStatus.CALCULATED,
         currentStep: 3,
-        payoutAmount,
+        payoutAmount: tierEval.payoutAmount,
+        severityTier: tierEval.tier,
+        payoutPercentage: tierEval.payoutPercentage,
       },
     }),
     prisma.workflowLog.create({
@@ -510,13 +518,12 @@ export async function executeParametricClaimWorkflow(
         claimId: createdClaim.id,
         stepName: "PAYOUT_CALCULATED",
         status: "SUCCESS",
-        details: `Severity multiplier ${severityRatio}x (${triggerValue}/${policy.thresholdValue}) applied to $${policy.coverageAmount.toFixed(2)} cap -> calculated payout $${payoutAmount.toFixed(2)}.`,
+        details: `${tierEval.tierLabel}: Observed ${triggerValue}${metricMeta.unit} (Moderate ≥ ${policy.thresholdValue}${metricMeta.unit}, Severe ≥ ${tierEval.severeCutoff}${metricMeta.unit}) -> ${tierEval.payoutPercentage}% of ${formatCurrency(policy.coverageAmount)} = ${formatCurrency(tierEval.payoutAmount)}.`,
       },
     }),
   ]);
   stepsExecuted.push("PAYOUT_CALCULATED");
 
-  // --- STEPS 4 & 5: FUNDS_RESERVED -> DISBURSEMENT_ISSUED ---
   return executeSettlementSteps(createdClaim.id, {
     simulateStep4Failure,
     isResume: false,
@@ -524,10 +531,6 @@ export async function executeParametricClaimWorkflow(
   });
 }
 
-/**
- * Safely resumes a paused/failed workflow directly at `claim.currentStep + 1`
- * (e.g., Step 4 FUNDS_RESERVED -> Step 5 DISBURSEMENT_ISSUED) without re-running Steps 1–3.
- */
 export async function resumeParametricClaimWorkflow(
   claimId: string,
   options: { simulateStep4Failure?: boolean } = {}
@@ -541,7 +544,7 @@ export async function resumeParametricClaimWorkflow(
       stepsExecuted: [],
       resumedFromStep: null,
       duplicateBlocked: true,
-      message: `Claim ${existing.idempotencyKey} is already DISBURSED ($${existing.payoutAmount.toFixed(2)}). Idempotency safeguard prevented re-execution.`,
+      message: `Claim ${existing.idempotencyKey} is already DISBURSED (${formatCurrency(existing.payoutAmount)}). Idempotency safeguard prevented re-execution.`,
     };
   }
 

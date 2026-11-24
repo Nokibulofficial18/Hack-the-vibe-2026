@@ -12,6 +12,12 @@ enum Role {
   ADMIN
 }
 
+enum PayoutMethod {
+  BKASH
+  NAGAD
+  ROCKET
+}
+
 enum PolicyStatus {
   ACTIVE
   EXPIRED
@@ -29,14 +35,16 @@ enum ClaimStatus {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String
-  role      Role     @default(FARMER)
-  balance   Float    @default(0.0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  farms     Farm[]
+  id           String       @id @default(uuid())
+  email        String       @unique
+  name         String
+  role         Role         @default(FARMER)
+  balance      Float        @default(0.0)
+  payoutMethod PayoutMethod @default(BKASH)
+  mobileNumber String       @default("+8801711000000")
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  farms        Farm[]
 }
 
 model Farm {
@@ -57,8 +65,8 @@ model Policy {
   farmId         String
   farm           Farm         @relation(fields: [farmId], references: [id], onDelete: Cascade)
   metricType     String       // e.g., "RAINFALL_MAX", "DROUGHT_DAYS", "TEMP_MAX"
-  thresholdValue Float        // e.g., 100.0 (mm of rain)
-  coverageAmount Float        // Maximum payout limit
+  thresholdValue Float        // e.g., 65.0 (mm of rain)
+  coverageAmount Float        // Maximum payout limit in BDT
   premiumPaid    Float
   startDate      DateTime
   endDate        DateTime
@@ -68,18 +76,24 @@ model Policy {
 }
 
 model Claim {
-  id             String        @id @default(uuid())
-  policyId       String
-  policy         Policy        @relation(fields: [policyId], references: [id])
-  idempotencyKey String        @unique // Prevents duplicate payouts
-  triggerValue   Float         // Actual weather value observed
-  payoutAmount   Float         @default(0.0)
-  status         ClaimStatus   @default(TRIGGERED)
-  currentStep    Int           @default(1) // Track workflow progress (1 to 5)
-  failureReason  String?
-  workflowLogs   WorkflowLog[]
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  id               String        @id @default(uuid())
+  policyId         String
+  policy           Policy        @relation(fields: [policyId], references: [id])
+  idempotencyKey   String        @unique // Prevents duplicate payouts
+  triggerValue     Float         // Actual weather value observed
+  payoutAmount     Float         @default(0.0)
+  severityTier     String?       // "MODERATE" | "SEVERE"
+  payoutPercentage Int?          // 50 | 100
+  payoutMethod     PayoutMethod? // Snapshot of farmer MFS provider at settlement
+  recipientPhone   String?       // Snapshot of farmer +8801XXXXXXXXX at settlement
+  transactionId    String?       @unique // Simulated bKash / Nagad / Rocket Txn ID
+  disbursedAt      DateTime?
+  status           ClaimStatus   @default(TRIGGERED)
+  currentStep      Int           @default(1) // Track workflow progress (1 to 5)
+  failureReason    String?
+  workflowLogs     WorkflowLog[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 }
 
 model WorkflowLog {

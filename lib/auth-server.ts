@@ -9,6 +9,7 @@ import {
   type AuthUser,
   type UserRole,
 } from "./auth-constants";
+import type { PayoutMethodType } from "./domain";
 
 export interface SessionUser {
   id: string;
@@ -16,14 +17,10 @@ export interface SessionUser {
   name: string;
   role: UserRole;
   balance: number;
+  payoutMethod: PayoutMethodType;
+  mobileNumber: string;
 }
 
-/**
- * Resolves the active mock-authenticated user on the server from:
- * 1. `x-weathershield-user-id` request header (API clients / fetch calls)
- * 2. `weathershield_user_id` cookie (synced automatically by AuthProvider)
- * 3. Default Farmer account fallback
- */
 export async function getServerSessionUser(request?: Request): Promise<SessionUser> {
   const headerUserId = request?.headers.get(AUTH_HEADER_NAME);
   const cookieStore = cookies();
@@ -38,6 +35,8 @@ export async function getServerSessionUser(request?: Request): Promise<SessionUs
       name: true,
       role: true,
       balance: true,
+      payoutMethod: true,
+      mobileNumber: true,
     },
   });
 
@@ -48,6 +47,8 @@ export async function getServerSessionUser(request?: Request): Promise<SessionUs
       name: dbUser.name,
       role: dbUser.role as UserRole,
       balance: dbUser.balance,
+      payoutMethod: dbUser.payoutMethod as PayoutMethodType,
+      mobileNumber: dbUser.mobileNumber,
     };
   }
 
@@ -58,6 +59,8 @@ export async function getServerSessionUser(request?: Request): Promise<SessionUs
     name: fallback.name,
     role: fallback.role,
     balance: fallback.balance,
+    payoutMethod: fallback.payoutMethod,
+    mobileNumber: fallback.mobileNumber,
   };
 }
 

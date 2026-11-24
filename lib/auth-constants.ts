@@ -1,3 +1,5 @@
+import type { PayoutMethodType } from "./domain";
+
 export type UserRole = "FARMER" | "ADMIN";
 
 export interface AuthUser {
@@ -6,6 +8,8 @@ export interface AuthUser {
   name: string;
   role: UserRole;
   balance: number;
+  payoutMethod: PayoutMethodType;
+  mobileNumber: string;
   label: string;
 }
 
@@ -16,27 +20,33 @@ export const AUTH_HEADER_NAME = "x-weathershield-user-id";
 export const MOCK_USERS: readonly AuthUser[] = [
   {
     id: "user-farmer-1",
-    email: "farmer@example.com",
-    name: "Mateo Santos",
+    email: "rokon.uddin@krishi.bd",
+    name: "Rokon Uddin",
     role: "FARMER",
-    balance: 450.0,
-    label: "Farmer · Luzon & Bukidnon",
+    balance: 12500.0,
+    payoutMethod: "BKASH",
+    mobileNumber: "+8801712345678",
+    label: "Farmer · Sunamganj, Kurigram & Bogura",
   },
   {
     id: "user-farmer-2",
-    email: "priya.nair@weathershield.io",
-    name: "Priya Nair",
+    email: "fatima.begum@krishi.bd",
+    name: "Fatima Begum",
     role: "FARMER",
-    balance: 620.0,
-    label: "Farmer · Wayanad",
+    balance: 18000.0,
+    payoutMethod: "NAGAD",
+    mobileNumber: "+8801819876543",
+    label: "Farmer · Satkhira & Rajshahi",
   },
   {
     id: "user-admin-1",
-    email: "admin@weathershield.io",
-    name: "Elena Rostova",
+    email: "abdul.karim@weathershield.bd",
+    name: "Abdul Karim",
     role: "ADMIN",
-    balance: 250000.0,
-    label: "Insurer Risk Admin",
+    balance: 2500000.0,
+    payoutMethod: "ROCKET",
+    mobileNumber: "+8801911223344",
+    label: "Insurer Risk Admin (Bangladesh)",
   },
 ] as const;
 

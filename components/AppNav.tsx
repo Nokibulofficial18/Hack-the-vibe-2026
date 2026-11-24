@@ -42,8 +42,8 @@ export function AppNav() {
             className={cn(
               "inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
               isActive
-                ? "bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                ? "bg-[#065F46] text-white shadow-sm"
+                : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"
             )}
           >
             <Icon className="h-3.5 w-3.5" aria-hidden="true" />

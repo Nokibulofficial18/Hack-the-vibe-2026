@@ -16,10 +16,13 @@ import {
   XCircle,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { useToast } from "@/components/ToastProvider";
+import { ListCardSkeleton } from "@/components/DashboardSkeletons";
 import {
   METRIC_OPTIONS,
-  calculateParametricPayout,
+  evaluateTieredPayout,
   getMetricMeta,
+  getSevereThresholdCutoff,
   validatePolicyPayload,
   type MetricType,
 } from "@/lib/domain";
@@ -69,6 +72,7 @@ const STATUS_BADGE: Record<string, string> = {
 
 export function PolicyRegistryClient() {
   const { user, isAdmin, getAuthHeaders } = useAuth();
+  const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedFarmId = searchParams.get("farmId") ?? "";
@@ -83,12 +87,12 @@ export function PolicyRegistryClient() {
   const [metricFilter, setMetricFilter] = useState("ALL");
   const [sortBy, setSortBy] = useState<"createdAt" | "coverageAmount" | "thresholdValue">("createdAt");
 
-  // Policy Form
+  // Policy Form (BDT micro-insurance defaults: ৳15,000 coverage, ৳900 premium)
   const [farmId, setFarmId] = useState(preselectedFarmId);
   const [metricType, setMetricType] = useState<MetricType>("RAINFALL_MAX");
-  const [thresholdValue, setThresholdValue] = useState("50");
-  const [coverageAmount, setCoverageAmount] = useState("1000");
-  const [premiumPaid, setPremiumPaid] = useState("60");
+  const [thresholdValue, setThresholdValue] = useState("65");
+  const [coverageAmount, setCoverageAmount] = useState("15000");
+  const [premiumPaid, setPremiumPaid] = useState("900");
   const [durationDays, setDurationDays] = useState("180");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -142,6 +146,17 @@ export function PolicyRegistryClient() {
   const handleCoverageChange = (val: string) => {
     setCoverageAmount(val);
     const num = Number(val);
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      if (val !== "" && (Number.isNaN(num) || num <= 0)) {
+        next.coverageAmount = "Coverage amount must be greater than ৳0.";
+      } else if (num > 5000000) {
+        next.coverageAmount = "Coverage amount cannot exceed ৳50,00,000 per micro-policy.";
+      } else {
+        delete next.coverageAmount;
+      }
+      return next;
+    });
     if (!Number.isNaN(num) && num > 0) {
       setPremiumPaid(String(Math.round(num * 0.06 * 100) / 100));
     }
@@ -163,7 +178,13 @@ export function PolicyRegistryClient() {
 
     if (!validation.valid) {
       setFieldErrors(validation.errors);
+      const firstError = Object.values(validation.errors)[0];
       setFormError("Please fix the validation errors before issuing this policy.");
+      toast({
+        variant: "error",
+        title: "Invalid Policy Parameters",
+        description: firstError,
+      });
       return;
     }
 
@@ -195,18 +216,22 @@ export function PolicyRegistryClient() {
 
       if (!response.ok) {
         setFieldErrors(data.fieldErrors ?? {});
-        setFormError(data.error ?? "Failed to create parametric policy.");
+        const msg = data.error ?? "Failed to create parametric policy.";
+        setFormError(msg);
+        toast({ variant: "error", title: "Policy Issuance Rejected", description: msg });
         return;
       }
 
       const meta = getMetricMeta(metricType);
-      setSuccessMessage(
-        `Issued active ${meta.label} policy (≥ ${thresholdValue}${meta.unit}, max ${formatCurrency(Number(coverageAmount))}) for ${data.policy?.farm.name}.`
-      );
+      const msg = `Issued active ${meta.label} policy (≥ ${thresholdValue}${meta.unit}, max ${formatCurrency(Number(coverageAmount))}) for ${data.policy?.farm.name}.`;
+      setSuccessMessage(msg);
+      toast({ variant: "success", title: "Parametric Policy Issued", description: msg });
       await loadData();
       router.refresh();
     } catch {
-      setFormError("Network error while creating policy.");
+      const msg = "Network error while creating policy.";
+      setFormError(msg);
+      toast({ variant: "error", title: "Network Error", description: msg });
     } finally {
       setSubmitting(false);
     }
@@ -224,12 +249,16 @@ export function PolicyRegistryClient() {
         body: JSON.stringify({ status: "CANCELLED" }),
       });
       if (response.ok) {
-        setSuccessMessage(`Cancelled policy on ${policy.farm.name}.`);
+        const msg = `Cancelled policy on ${policy.farm.name}.`;
+        setSuccessMessage(msg);
+        toast({ variant: "info", title: "Policy Cancelled", description: msg });
         await loadData();
         router.refresh();
       }
     } catch {
-      setFormError("Unable to update policy status.");
+      const msg = "Unable to update policy status.";
+      setFormError(msg);
+      toast({ variant: "error", title: "Update Error", description: msg });
     }
   };
 
@@ -271,6 +300,19 @@ export function PolicyRegistryClient() {
   const activeMetricMeta = getMetricMeta(metricType);
   const parsedThreshold = Math.max(1, Number(thresholdValue) || 1);
   const parsedCoverage = Math.max(0, Number(coverageAmount) || 0);
+  const severeCutoff = getSevereThresholdCutoff(metricType, parsedThreshold);
+  const moderatePreview = evaluateTieredPayout(
+    metricType,
+    parsedCoverage,
+    parsedThreshold,
+    parsedThreshold
+  );
+  const severePreview = evaluateTieredPayout(
+    metricType,
+    parsedCoverage,
+    severeCutoff,
+    parsedThreshold
+  );
 
   return (
     <div className="space-y-6">
@@ -427,19 +469,43 @@ export function PolicyRegistryClient() {
                 </div>
 
                 <div>
-                  <label htmlFor="coverage-amount" className="block text-xs font-semibold text-slate-700">
-                    Max Coverage Cap (USD)
+                  <label htmlFor="coverage-amount" className="block text-xs font-bold text-slate-800">
+                    Max Coverage Cap (BDT ৳, &gt; 0)
                   </label>
                   <input
                     id="coverage-amount"
                     type="number"
-                    step="50"
+                    step="1000"
+                    min="1"
                     value={coverageAmount}
                     onChange={(e) => handleCoverageChange(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    aria-invalid={Boolean(fieldErrors.coverageAmount)}
+                    aria-describedby={fieldErrors.coverageAmount ? "coverage-amount-error" : undefined}
+                    className={cn(
+                      "mt-1 w-full rounded-lg border px-3 py-2 text-sm text-slate-950 focus:outline-none focus:ring-2",
+                      fieldErrors.coverageAmount
+                        ? "border-rose-500 bg-rose-50/40 focus:border-rose-600 focus:ring-rose-500/25"
+                        : "border-slate-300 focus:border-emerald-600 focus:ring-emerald-600/20"
+                    )}
                   />
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {[5000, 15000, 25000, 50000].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => handleCoverageChange(String(preset))}
+                        className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-900"
+                      >
+                        {formatCurrency(preset)}
+                      </button>
+                    ))}
+                  </div>
                   {fieldErrors.coverageAmount && (
-                    <p className="mt-1 text-xs font-medium text-rose-600">
+                    <p
+                      id="coverage-amount-error"
+                      role="alert"
+                      className="mt-1 text-xs font-semibold text-rose-700"
+                    >
                       {fieldErrors.coverageAmount}
                     </p>
                   )}
@@ -448,8 +514,8 @@ export function PolicyRegistryClient() {
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label htmlFor="premium-paid" className="block text-xs font-semibold text-slate-700">
-                    Premium Paid (USD)
+                  <label htmlFor="premium-paid" className="block text-xs font-bold text-slate-800">
+                    Premium Paid (BDT ৳)
                   </label>
                   <input
                     id="premium-paid"
@@ -485,40 +551,33 @@ export function PolicyRegistryClient() {
                 </div>
               </div>
 
-              {/* Live Payout Formula Preview */}
-              <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3.5">
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-900">
+              {/* Live Tiered Payout Rules Preview (M04) */}
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-950">
                   <Calculator className="h-3.5 w-3.5 text-emerald-700" aria-hidden="true" />
-                  Automated Payout Formula Preview
+                  Tiered Parametric Payout Schedule (MFS Instant Credit)
                 </div>
-                <p className="mt-1 text-[11px] text-emerald-800/80">
-                  Payout = min(Coverage, Coverage × Observed / Threshold) when Observed ≥ Threshold.
+                <p className="mt-1 text-[11px] text-emerald-900">
+                  Moderate breach pays <strong>50%</strong> of coverage; severe breach pays{" "}
+                  <strong>100%</strong> directly to bKash / Nagad / Rocket.
                 </p>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                  <div className="rounded-lg bg-white/80 p-2">
-                    <span className="text-[11px] text-slate-500">
-                      At {parsedThreshold}
-                      {activeMetricMeta.unit} (1.0x)
+                  <div className="rounded-lg border border-amber-200 bg-white p-2.5">
+                    <span className="text-[11px] font-semibold text-amber-900">
+                      Moderate ({parsedThreshold}–{severeCutoff - 0.1}
+                      {activeMetricMeta.unit}) · 50%
                     </span>
-                    <p className="font-bold text-slate-900">
-                      {formatCurrency(
-                        calculateParametricPayout(parsedCoverage, parsedThreshold, parsedThreshold)
-                      )}
+                    <p className="mt-0.5 font-extrabold text-slate-950">
+                      {formatCurrency(moderatePreview.payoutAmount)}
                     </p>
                   </div>
-                  <div className="rounded-lg bg-white/80 p-2">
-                    <span className="text-[11px] text-slate-500">
-                      At {(parsedThreshold * 1.5).toFixed(1)}
-                      {activeMetricMeta.unit} (1.5x cap)
+                  <div className="rounded-lg border border-emerald-200 bg-white p-2.5">
+                    <span className="text-[11px] font-semibold text-emerald-900">
+                      Severe (≥ {severeCutoff}
+                      {activeMetricMeta.unit}) · 100%
                     </span>
-                    <p className="font-bold text-emerald-700">
-                      {formatCurrency(
-                        calculateParametricPayout(
-                          parsedCoverage,
-                          parsedThreshold * 1.5,
-                          parsedThreshold
-                        )
-                      )}
+                    <p className="mt-0.5 font-extrabold text-emerald-800">
+                      {formatCurrency(severePreview.payoutAmount)}
                     </p>
                   </div>
                 </div>
@@ -606,8 +665,8 @@ export function PolicyRegistryClient() {
 
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             {loading ? (
-              <div className="p-10 text-center text-sm text-slate-500">
-                Loading policies for {user.name}...
+              <div className="p-4">
+                <ListCardSkeleton rows={3} />
               </div>
             ) : filteredPolicies.length === 0 ? (
               <div className="p-10 text-center text-sm text-slate-500">

@@ -42,7 +42,7 @@ export function RoleSwitcher() {
 
   const handleDemoReset = async () => {
     const confirmed = window.confirm(
-      "Reset demo database back to the clean seeded state (1 Admin, 2 Farmers, 3 Farms, 4 Active Policies)?"
+      "Reset demo database back to the clean Bangladesh seed dataset (Abdul Karim, Rokon Uddin, Fatima Begum, 5 district farms, 6 active policies)?"
     );
     if (!confirmed) return;
 

@@ -30,7 +30,16 @@ export async function GET(request: Request) {
             include: {
               farm: {
                 include: {
-                  user: { select: { id: true, name: true, email: true, balance: true } },
+                  user: {
+                    select: {
+                      id: true,
+                      name: true,
+                      email: true,
+                      balance: true,
+                      payoutMethod: true,
+                      mobileNumber: true,
+                    },
+                  },
                 },
               },
             },

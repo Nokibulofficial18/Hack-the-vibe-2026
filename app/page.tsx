@@ -12,7 +12,9 @@ import {
 } from "lucide-react";
 import prisma from "@/lib/prisma";
 import { getServerSessionUser } from "@/lib/auth-server";
-import { formatCurrency } from "@/lib/utils";
+import { getPayoutMethodMeta, maskBdMobileNumber } from "@/lib/domain";
+import { formatCurrency, formatLandArea } from "@/lib/utils";
+import { MobileWalletCard } from "@/components/MobileWalletCard";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +34,15 @@ export default async function HomePage() {
     prisma.policy.findMany({
       where: isAdmin ? undefined : { farm: { userId: currentUser.id } },
       include: {
-        farm: { select: { name: true, cropType: true, latitude: true, longitude: true } },
+        farm: {
+          select: {
+            name: true,
+            cropType: true,
+            sizeHectares: true,
+            latitude: true,
+            longitude: true,
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -79,10 +89,16 @@ export default async function HomePage() {
             <p className="mt-0.5 text-2xl font-bold text-emerald-900">
               {formatCurrency(currentUser.balance)}
             </p>
-            <p className="text-xs text-emerald-700/80">{currentUser.email}</p>
+            <p className="text-xs text-emerald-800">
+              {currentUser.email} · {getPayoutMethodMeta(currentUser.payoutMethod).label}{" "}
+              {maskBdMobileNumber(currentUser.mobileNumber)}
+            </p>
           </div>
         </div>
       </section>
+
+      {/* Mobile Payout Wallet Configuration */}
+      <MobileWalletCard />
 
       {/* KPI Summary Cards */}
       <section
@@ -237,7 +253,9 @@ export default async function HomePage() {
                 <tr key={policy.id} className="hover:bg-slate-50/80">
                   <td className="px-6 py-4">
                     <div className="font-medium text-slate-900">{policy.farm.name}</div>
-                    <div className="text-xs text-slate-500">{policy.farm.cropType}</div>
+                    <div className="text-xs text-slate-600">
+                      {policy.farm.cropType} · {formatLandArea(policy.farm.sizeHectares)}
+                    </div>
                   </td>
                   <td className="px-6 py-4 font-mono text-xs text-slate-600">
                     {policy.farm.latitude.toFixed(4)}, {policy.farm.longitude.toFixed(4)}

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { PolicyStatus, Role } from "@prisma/client";
+import { PayoutMethod, PolicyStatus, Role } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getServerSessionUser } from "@/lib/auth-server";
 
@@ -18,7 +18,6 @@ export async function POST(request: Request) {
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const oneFiftyDaysAhead = new Date(now.getTime() + 150 * 24 * 60 * 60 * 1000);
-    const todayIso = now.toISOString().split("T")[0];
 
     await prisma.$transaction(async (tx) => {
       await tx.workflowLog.deleteMany({});
@@ -28,68 +27,113 @@ export async function POST(request: Request) {
       await tx.weatherCache.deleteMany({});
 
       await tx.user.upsert({
-        where: { email: "admin@weathershield.io" },
-        update: { name: "Elena Rostova", role: Role.ADMIN, balance: 250000.0 },
+        where: { id: "user-admin-1" },
+        update: {
+          email: "abdul.karim@weathershield.bd",
+          name: "Abdul Karim",
+          role: Role.ADMIN,
+          balance: 2500000.0,
+          payoutMethod: PayoutMethod.ROCKET,
+          mobileNumber: "+8801911223344",
+        },
         create: {
           id: "user-admin-1",
-          email: "admin@weathershield.io",
-          name: "Elena Rostova",
+          email: "abdul.karim@weathershield.bd",
+          name: "Abdul Karim",
           role: Role.ADMIN,
-          balance: 250000.0,
+          balance: 2500000.0,
+          payoutMethod: PayoutMethod.ROCKET,
+          mobileNumber: "+8801911223344",
         },
       });
 
       await tx.user.upsert({
-        where: { email: "farmer@example.com" },
-        update: { name: "Mateo Santos", role: Role.FARMER, balance: 450.0 },
+        where: { id: "user-farmer-1" },
+        update: {
+          email: "rokon.uddin@krishi.bd",
+          name: "Rokon Uddin",
+          role: Role.FARMER,
+          balance: 12500.0,
+          payoutMethod: PayoutMethod.BKASH,
+          mobileNumber: "+8801712345678",
+        },
         create: {
           id: "user-farmer-1",
-          email: "farmer@example.com",
-          name: "Mateo Santos",
+          email: "rokon.uddin@krishi.bd",
+          name: "Rokon Uddin",
           role: Role.FARMER,
-          balance: 450.0,
+          balance: 12500.0,
+          payoutMethod: PayoutMethod.BKASH,
+          mobileNumber: "+8801712345678",
         },
       });
 
       await tx.user.upsert({
-        where: { email: "priya.nair@weathershield.io" },
-        update: { name: "Priya Nair", role: Role.FARMER, balance: 620.0 },
+        where: { id: "user-farmer-2" },
+        update: {
+          email: "fatima.begum@krishi.bd",
+          name: "Fatima Begum",
+          role: Role.FARMER,
+          balance: 18000.0,
+          payoutMethod: PayoutMethod.NAGAD,
+          mobileNumber: "+8801819876543",
+        },
         create: {
           id: "user-farmer-2",
-          email: "priya.nair@weathershield.io",
-          name: "Priya Nair",
+          email: "fatima.begum@krishi.bd",
+          name: "Fatima Begum",
           role: Role.FARMER,
-          balance: 620.0,
+          balance: 18000.0,
+          payoutMethod: PayoutMethod.NAGAD,
+          mobileNumber: "+8801819876543",
         },
       });
 
       await tx.farm.createMany({
         data: [
           {
-            id: "farm-luzon-rice",
-            name: "Luzon Valley Rice Co-op",
-            latitude: 14.5995,
-            longitude: 120.9842,
-            cropType: "Irrigated Rice",
-            sizeHectares: 4.5,
+            id: "farm-sunamganj-haor",
+            name: "Tahirpur Haor Boro Plot (Sunamganj)",
+            latitude: 25.0658,
+            longitude: 91.395,
+            cropType: "Boro Rice",
+            sizeHectares: 0.8027,
             userId: "user-farmer-1",
           },
           {
-            id: "farm-mindanao-corn",
-            name: "Bukidnon Highland Maize",
-            latitude: 8.0515,
-            longitude: 125.0942,
-            cropType: "Sweet Corn",
-            sizeHectares: 3.2,
+            id: "farm-kurigram-char",
+            name: "Chilmari Riverine Char Farm (Kurigram)",
+            latitude: 25.8054,
+            longitude: 89.6362,
+            cropType: "Jute / Aman Paddy",
+            sizeHectares: 1.204,
             userId: "user-farmer-1",
           },
           {
-            id: "farm-kerala-spice",
-            name: "Wayanad Emerald Spice Plot",
-            latitude: 11.6854,
-            longitude: 76.132,
-            cropType: "Black Pepper & Coffee",
-            sizeHectares: 5.8,
+            id: "farm-bogura-potato",
+            name: "Sherpur Alluvial Potato Field (Bogura)",
+            latitude: 24.8465,
+            longitude: 89.3773,
+            cropType: "Potato / Rice",
+            sizeHectares: 0.6689,
+            userId: "user-farmer-1",
+          },
+          {
+            id: "farm-satkhira-coastal",
+            name: "Shyamnagar Coastal Gher & Paddy (Satkhira)",
+            latitude: 22.7185,
+            longitude: 89.0705,
+            cropType: "Aman Paddy / Shrimp Aquaculture",
+            sizeHectares: 1.6054,
+            userId: "user-farmer-2",
+          },
+          {
+            id: "farm-rajshahi-barind",
+            name: "Godagari Barind Mango & Wheat (Rajshahi)",
+            latitude: 24.3745,
+            longitude: 88.6042,
+            cropType: "Mango / Wheat",
+            sizeHectares: 1.0702,
             userId: "user-farmer-2",
           },
         ],
@@ -98,45 +142,67 @@ export async function POST(request: Request) {
       await tx.policy.createMany({
         data: [
           {
-            id: "policy-luzon-rainfall",
-            farmId: "farm-luzon-rice",
+            id: "policy-sunamganj-flood",
+            farmId: "farm-sunamganj-haor",
             metricType: "RAINFALL_MAX",
             thresholdValue: 50.0,
-            coverageAmount: 1500.0,
-            premiumPaid: 95.0,
+            coverageAmount: 30000.0,
+            premiumPaid: 1800.0,
             startDate: thirtyDaysAgo,
             endDate: oneFiftyDaysAhead,
             status: PolicyStatus.ACTIVE,
           },
           {
-            id: "policy-luzon-heat",
-            farmId: "farm-luzon-rice",
+            id: "policy-kurigram-monsoon",
+            farmId: "farm-kurigram-char",
+            metricType: "RAINFALL_MAX",
+            thresholdValue: 60.0,
+            coverageAmount: 22000.0,
+            premiumPaid: 1320.0,
+            startDate: thirtyDaysAgo,
+            endDate: oneFiftyDaysAhead,
+            status: PolicyStatus.ACTIVE,
+          },
+          {
+            id: "policy-bogura-rain",
+            farmId: "farm-bogura-potato",
+            metricType: "RAINFALL_MAX",
+            thresholdValue: 50.0,
+            coverageAmount: 15000.0,
+            premiumPaid: 900.0,
+            startDate: thirtyDaysAgo,
+            endDate: oneFiftyDaysAhead,
+            status: PolicyStatus.ACTIVE,
+          },
+          {
+            id: "policy-satkhira-cyclone",
+            farmId: "farm-satkhira-coastal",
+            metricType: "RAINFALL_MAX",
+            thresholdValue: 65.0,
+            coverageAmount: 45000.0,
+            premiumPaid: 2700.0,
+            startDate: thirtyDaysAgo,
+            endDate: oneFiftyDaysAhead,
+            status: PolicyStatus.ACTIVE,
+          },
+          {
+            id: "policy-rajshahi-heat",
+            farmId: "farm-rajshahi-barind",
             metricType: "TEMP_MAX",
             thresholdValue: 38.0,
-            coverageAmount: 1000.0,
-            premiumPaid: 60.0,
+            coverageAmount: 25000.0,
+            premiumPaid: 1500.0,
             startDate: thirtyDaysAgo,
             endDate: oneFiftyDaysAhead,
             status: PolicyStatus.ACTIVE,
           },
           {
-            id: "policy-mindanao-drought",
-            farmId: "farm-mindanao-corn",
+            id: "policy-rajshahi-drought",
+            farmId: "farm-rajshahi-barind",
             metricType: "DROUGHT_DAYS",
             thresholdValue: 14.0,
-            coverageAmount: 1200.0,
-            premiumPaid: 75.0,
-            startDate: thirtyDaysAgo,
-            endDate: oneFiftyDaysAhead,
-            status: PolicyStatus.ACTIVE,
-          },
-          {
-            id: "policy-kerala-monsoon",
-            farmId: "farm-kerala-spice",
-            metricType: "RAINFALL_MAX",
-            thresholdValue: 80.0,
-            coverageAmount: 2200.0,
-            premiumPaid: 140.0,
+            coverageAmount: 18000.0,
+            premiumPaid: 1080.0,
             startDate: thirtyDaysAgo,
             endDate: oneFiftyDaysAhead,
             status: PolicyStatus.ACTIVE,
@@ -144,41 +210,89 @@ export async function POST(request: Request) {
         ],
       });
 
+      const sevenDates = Array.from({ length: 7 }, (_, i) =>
+        new Date(now.getTime() + i * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+      );
+
       await tx.weatherCache.createMany({
         data: [
           {
-            id: "cache-luzon-rice",
-            latitude: 14.5995,
-            longitude: 120.9842,
+            id: "cache-sunamganj-haor",
+            latitude: 25.0658,
+            longitude: 91.395,
             weatherData: JSON.stringify({
-              latitude: 14.5995,
-              longitude: 120.9842,
-              timezone: "Asia/Manila",
-              daily: { time: [todayIso], rain_sum: [18.4], temperature_2m_max: [33.2] },
+              latitude: 25.0658,
+              longitude: 91.395,
+              timezone: "Asia/Dhaka",
+              daily: {
+                time: sevenDates,
+                rain_sum: [56.4, 44.0, 68.5, 38.2, 29.0, 48.5, 74.2],
+                temperature_2m_max: [30.8, 31.2, 29.6, 31.5, 32.0, 30.4, 29.1],
+              },
             }),
             fetchedAt: now,
           },
           {
-            id: "cache-mindanao-corn",
-            latitude: 8.0515,
-            longitude: 125.0942,
+            id: "cache-kurigram-char",
+            latitude: 25.8054,
+            longitude: 89.6362,
             weatherData: JSON.stringify({
-              latitude: 8.0515,
-              longitude: 125.0942,
-              timezone: "Asia/Manila",
-              daily: { time: [todayIso], rain_sum: [2.1], temperature_2m_max: [31.6] },
+              latitude: 25.8054,
+              longitude: 89.6362,
+              timezone: "Asia/Dhaka",
+              daily: {
+                time: sevenDates,
+                rain_sum: [34.2, 28.0, 41.5, 22.0, 18.4, 31.0, 26.5],
+                temperature_2m_max: [31.4, 32.1, 30.9, 32.5, 33.1, 31.8, 32.0],
+              },
             }),
             fetchedAt: now,
           },
           {
-            id: "cache-kerala-spice",
-            latitude: 11.6854,
-            longitude: 76.132,
+            id: "cache-bogura-potato",
+            latitude: 24.8465,
+            longitude: 89.3773,
             weatherData: JSON.stringify({
-              latitude: 11.6854,
-              longitude: 76.132,
-              timezone: "Asia/Kolkata",
-              daily: { time: [todayIso], rain_sum: [42.0], temperature_2m_max: [29.4] },
+              latitude: 24.8465,
+              longitude: 89.3773,
+              timezone: "Asia/Dhaka",
+              daily: {
+                time: sevenDates,
+                rain_sum: [18.6, 12.4, 24.0, 15.2, 9.8, 21.5, 16.0],
+                temperature_2m_max: [32.9, 33.4, 32.1, 33.8, 34.2, 33.0, 33.5],
+              },
+            }),
+            fetchedAt: now,
+          },
+          {
+            id: "cache-satkhira-coastal",
+            latitude: 22.7185,
+            longitude: 89.0705,
+            weatherData: JSON.stringify({
+              latitude: 22.7185,
+              longitude: 89.0705,
+              timezone: "Asia/Dhaka",
+              daily: {
+                time: sevenDates,
+                rain_sum: [58.5, 49.2, 66.8, 41.0, 33.5, 52.0, 62.4],
+                temperature_2m_max: [31.2, 31.6, 30.2, 32.0, 32.4, 31.1, 30.6],
+              },
+            }),
+            fetchedAt: now,
+          },
+          {
+            id: "cache-rajshahi-barind",
+            latitude: 24.3745,
+            longitude: 88.6042,
+            weatherData: JSON.stringify({
+              latitude: 24.3745,
+              longitude: 88.6042,
+              timezone: "Asia/Dhaka",
+              daily: {
+                time: sevenDates,
+                rain_sum: [0.4, 0.0, 0.0, 0.2, 0.0, 1.4, 0.0],
+                temperature_2m_max: [36.4, 37.5, 38.8, 40.1, 39.2, 37.4, 36.9],
+              },
             }),
             fetchedAt: now,
           },
@@ -188,7 +302,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       reset: true,
-      message: "Restored 1 Admin, 2 Farmers, 3 Farms, 4 Active Policies, and 3 WeatherCache snapshots.",
+      message:
+        "Restored Bangladesh MFS dataset: Rokon Uddin (bKash), Fatima Begum (Nagad), Abdul Karim (Rocket), 5 District Farms, and 6 Active Policies.",
     });
   } catch (error) {
     console.error("POST /api/demo/reset error:", error);

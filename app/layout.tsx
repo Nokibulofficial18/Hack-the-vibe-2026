@@ -10,9 +10,9 @@ import { ToastProvider } from "@/components/ToastProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "WeatherShield — Parametric Micro-Insurance Engine",
+  title: "WeatherShield Bangladesh — Parametric Micro-Insurance Engine",
   description:
-    "Automated parametric micro-insurance platform protecting smallholder farmers against extreme climate events.",
+    "Automated BDT parametric micro-insurance protecting smallholder farmers across climate-vulnerable Bangladesh districts.",
 };
 
 export default function RootLayout({
@@ -40,15 +40,15 @@ export default function RootLayout({
                     href="/"
                     className="flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
                   >
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-700 text-white shadow-sm">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#065F46] text-white shadow-sm">
                       <CloudRainWind className="h-5 w-5" aria-hidden="true" />
                     </div>
                     <div>
-                      <span className="text-base font-bold tracking-tight text-slate-950">
+                      <span className="text-base font-extrabold tracking-tight text-slate-950">
                         WeatherShield
                       </span>
-                      <p className="text-[11px] font-medium text-slate-600">
-                        Parametric Micro-Insurance Engine
+                      <p className="text-[11px] font-semibold text-[#065F46]">
+                        Bangladesh Climate Fintech · Micro-Insurance
                       </p>
                     </div>
                   </Link>

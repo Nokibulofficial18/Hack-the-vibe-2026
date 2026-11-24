@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { ClaimStatus, PolicyStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { canAccessResource, getServerSessionUser } from "@/lib/auth-server";
-import { evaluatePolicyRisk, getObservedMetricValue } from "@/lib/domain";
+import {
+  evaluatePolicyRisk,
+  extractBangladeshDistrict,
+  getObservedMetricValue,
+} from "@/lib/domain";
 import { getWeatherFromCache } from "@/lib/cache";
 import {
   fetchWeatherWithResilience,
@@ -19,13 +23,27 @@ export async function GET(request: Request) {
       prisma.farm.findMany({
         where: currentUser.role === "ADMIN" ? undefined : { userId: currentUser.id },
         include: {
-          user: { select: { id: true, name: true, email: true } },
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              payoutMethod: true,
+              mobileNumber: true,
+            },
+          },
           policies: {
             include: {
               claims: {
-                select: { id: true, status: true, payoutAmount: true, createdAt: true },
+                select: {
+                  id: true,
+                  status: true,
+                  payoutAmount: true,
+                  severityTier: true,
+                  transactionId: true,
+                  createdAt: true,
+                },
                 orderBy: { createdAt: "desc" },
-                take: 1,
               },
             },
             orderBy: { createdAt: "desc" },
@@ -49,6 +67,7 @@ export async function GET(request: Request) {
       farms.map(async (farm) => {
         const cached = await getWeatherFromCache(farm.latitude, farm.longitude);
         const reading = cached?.reading ?? null;
+        const district = extractBangladeshDistrict(farm.name, farm.latitude, farm.longitude);
 
         const evaluatedPolicies = farm.policies.map((policy) => {
           const observedValue = getObservedMetricValue(policy.metricType, reading);
@@ -66,17 +85,41 @@ export async function GET(request: Request) {
           };
         });
 
-        const hasBreach = evaluatedPolicies.some((p) => p.riskLevel === "BREACHED");
+        const hasBreachOrClaimed = evaluatedPolicies.some(
+          (p) => p.riskLevel === "BREACHED" || p.riskLevel === "CLAIMED"
+        );
         const hasWarning = evaluatedPolicies.some((p) => p.riskLevel === "AT_RISK");
+        const pinStatus: "BREACHED" | "WARNING" | "SAFE" = hasBreachOrClaimed
+          ? "BREACHED"
+          : hasWarning
+            ? "WARNING"
+            : "SAFE";
+
+        const activeCoverage = evaluatedPolicies
+          .filter((p) => p.status === PolicyStatus.ACTIVE)
+          .reduce((sum, p) => sum + p.coverageAmount, 0);
+
+        const farmPayouts = evaluatedPolicies.reduce(
+          (sum, p) =>
+            sum +
+            p.claims
+              .filter((c) => c.status === ClaimStatus.DISBURSED)
+              .reduce((cSum, c) => cSum + c.payoutAmount, 0),
+          0
+        );
 
         return {
           ...farm,
+          district,
+          pinStatus,
+          activeCoverage: Math.round(activeCoverage * 100) / 100,
+          totalPayouts: Math.round(farmPayouts * 100) / 100,
           policies: evaluatedPolicies,
           weather: reading,
           lastFetchedAt: cached?.fetchedAt ?? null,
           cacheAgeMinutes: cached?.ageMinutes ?? null,
           dataSource: cached ? "CACHED_SNAPSHOT" : "UNSYNCED",
-          farmStatus: hasBreach
+          farmStatus: hasBreachOrClaimed
             ? "TRIGGER_BREACHED"
             : hasWarning
               ? "ELEVATED_RISK"
@@ -102,6 +145,49 @@ export async function GET(request: Request) {
         riskTriggeredPolicies.reduce((sum, p) => sum + p.coverageAmount, 0) * 100
       ) / 100;
 
+    // Aggregate District Coverage vs Payouts for Recharts Bar Chart
+    const districtMap = new Map<
+      string,
+      {
+        district: string;
+        coverage: number;
+        payouts: number;
+        farmCount: number;
+        policyCount: number;
+        riskStatus: "SAFE" | "WARNING" | "BREACHED";
+      }
+    >();
+
+    for (const farm of monitoredFarms) {
+      const existing = districtMap.get(farm.district) ?? {
+        district: farm.district,
+        coverage: 0,
+        payouts: 0,
+        farmCount: 0,
+        policyCount: 0,
+        riskStatus: "SAFE" as const,
+      };
+
+      const totalFarmCoverage = farm.policies.reduce((s, p) => s + p.coverageAmount, 0);
+      existing.coverage = Math.round((existing.coverage + totalFarmCoverage) * 100) / 100;
+      existing.payouts = Math.round((existing.payouts + farm.totalPayouts) * 100) / 100;
+      existing.farmCount += 1;
+      existing.policyCount += farm.policies.length;
+
+      if (
+        farm.pinStatus === "BREACHED" ||
+        (farm.pinStatus === "WARNING" && existing.riskStatus === "SAFE")
+      ) {
+        existing.riskStatus = farm.pinStatus;
+      }
+
+      districtMap.set(farm.district, existing);
+    }
+
+    const byDistrict = Array.from(districtMap.values()).sort(
+      (a, b) => b.coverage - a.coverage
+    );
+
     return NextResponse.json({
       farms: monitoredFarms,
       currentUser,
@@ -116,6 +202,9 @@ export async function GET(request: Request) {
         atRiskPoliciesCount: activePolicies.filter((p) => p.riskLevel === "AT_RISK").length,
         breachedPoliciesCount: activePolicies.filter((p) => p.riskLevel === "BREACHED").length,
         monitoredFarmsCount: monitoredFarms.length,
+      },
+      charts: {
+        byDistrict,
       },
     });
   } catch (error) {
