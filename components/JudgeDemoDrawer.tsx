@@ -20,8 +20,8 @@ import {
 import { useAuth } from "@/lib/auth";
 import { useTranslation } from "@/lib/i18n";
 import { useToast } from "@/components/ToastProvider";
-import { getPayoutMethodMeta, maskBdMobileNumber } from "@/lib/domain";
-import { cn, formatCurrency } from "@/lib/utils";
+import { maskBdMobileNumber } from "@/lib/domain";
+import { cn } from "@/lib/utils";
 
 interface A06AttemptLog {
   attempt: number;
@@ -72,7 +72,15 @@ const SUNAMGANJ_POLICY_ID = "policy-sunamganj-flood";
 
 export function JudgeDemoDrawer({ open, onClose }: JudgeDemoDrawerProps) {
   const { isAdmin, getAuthHeaders } = useAuth();
-  const { t, translateStatus } = useTranslation();
+  const {
+    t,
+    translateStatus,
+    translateMfs,
+    translateAttemptStatus,
+    translateStepName,
+    formatNum,
+    formatTaka,
+  } = useTranslation();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -265,7 +273,7 @@ export function JudgeDemoDrawer({ open, onClose }: JudgeDemoDrawerProps) {
         toast({
           variant: "success",
           title: t("payoutDisbursedTitle"),
-          description: `${formatCurrency(data.claim?.payoutAmount ?? 0)} · ${getPayoutMethodMeta(data.claim?.payoutMethod).label} (Txn: ${data.claim?.transactionId ?? "—"})`,
+          description: `${formatTaka(data.claim?.payoutAmount ?? 0)} · ${translateMfs(data.claim?.payoutMethod)} (${t("txnShortPrefix")} ${data.claim?.transactionId ?? "—"})`,
         });
       } else if (data.duplicateBlocked || response.status === 409) {
         toast({
@@ -465,7 +473,8 @@ export function JudgeDemoDrawer({ open, onClose }: JudgeDemoDrawerProps) {
                         className="flex items-center justify-between gap-2 px-3 py-2 font-mono text-[11px] text-slate-700"
                       >
                         <span>
-                          <strong className="text-slate-900">#{log.attempt}</strong> {log.status}
+                          <strong className="text-slate-900">#{formatNum(log.attempt)}</strong>{" "}
+                          {translateAttemptStatus(log.status)}
                         </span>
                         <span className="text-slate-500">
                           {log.durationMs}ms
@@ -559,8 +568,8 @@ export function JudgeDemoDrawer({ open, onClose }: JudgeDemoDrawerProps) {
                   <p className="text-xs leading-relaxed text-slate-700">{a07Result.message}</p>
 
                   {a07Result.stepsExecuted.length > 0 && (
-                    <p className="rounded-lg border border-slate-200/70 bg-slate-50 px-3 py-2 font-mono text-[11px] text-slate-700">
-                      {a07Result.stepsExecuted.join(" → ")}
+                    <p className="rounded-lg border border-slate-200/70 bg-slate-50 px-3 py-2 text-[11px] text-slate-700">
+                      {a07Result.stepsExecuted.map(translateStepName).join(" → ")}
                     </p>
                   )}
 
@@ -570,14 +579,15 @@ export function JudgeDemoDrawer({ open, onClose }: JudgeDemoDrawerProps) {
                         <span className="inline-flex items-center gap-1.5 text-emerald-700">
                           <Smartphone className="h-3.5 w-3.5 shrink-0" />
                           {t("receiptShort", {
-                            method: getPayoutMethodMeta(claim.payoutMethod).label,
+                            method: translateMfs(claim.payoutMethod),
                           })}
                         </span>
-                        <span>{formatCurrency(claim.payoutAmount)}</span>
+                        <span>{formatTaka(claim.payoutAmount)}</span>
                       </div>
                       <p className="mt-1.5 font-mono text-[11px] text-slate-600">
-                        Txn: <strong className="text-slate-900">{claim.transactionId}</strong> ·{" "}
-                        {maskBdMobileNumber(claim.recipientPhone)}
+                        {t("txnShortPrefix")}{" "}
+                        <strong className="text-slate-900">{claim.transactionId}</strong> ·{" "}
+                        {formatNum(maskBdMobileNumber(claim.recipientPhone))}
                       </p>
                     </div>
                   )}

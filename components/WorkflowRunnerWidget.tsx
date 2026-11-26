@@ -22,7 +22,7 @@ import {
   getMetricMeta,
   getSevereThresholdCutoff,
 } from "@/lib/domain";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 export interface RunnerWorkflowLog {
   id: string;
@@ -128,7 +128,18 @@ export function WorkflowRunnerWidget({
   getAuthHeaders,
   onWorkflowUpdated,
 }: WorkflowRunnerWidgetProps) {
-  const { t, translateStatus } = useTranslation();
+  const {
+    t,
+    translateStatus,
+    translateFarmName,
+    translatePerson,
+    translateMetricShort,
+    translateUnit,
+    translateStepName,
+    formatNum,
+    formatTaka,
+    formatTime,
+  } = useTranslation();
   const { toast } = useToast();
   const [selectedPolicyId, setSelectedPolicyId] = useState<string>("");
   const [observedValue, setObservedValue] = useState<string>("");
@@ -333,7 +344,9 @@ export function WorkflowRunnerWidget({
   };
 
   const selectedPolicy = activePolicies.find((p) => p.id === selectedPolicyId);
-  const selectedUnit = selectedPolicy ? getMetricMeta(selectedPolicy.metricType).unit : "";
+  const selectedUnit = selectedPolicy
+    ? translateUnit(getMetricMeta(selectedPolicy.metricType).unit)
+    : "";
   const livePreviewTier = selectedPolicy
     ? evaluateTieredPayout(
         selectedPolicy.metricType,
@@ -409,8 +422,9 @@ export function WorkflowRunnerWidget({
                     const meta = getMetricMeta(p.metricType);
                     return (
                       <option key={p.id} value={p.id}>
-                        {p.farm.name} · {p.metricType} ≥ {p.thresholdValue}
-                        {meta.unit} ({formatCurrency(p.coverageAmount)})
+                        {translateFarmName(p.farm.name)} · {translateMetricShort(p.metricType)} ≥{" "}
+                        {formatNum(p.thresholdValue)} {translateUnit(meta.unit)} (
+                        {formatTaka(p.coverageAmount)})
                       </option>
                     );
                   })
@@ -453,7 +467,9 @@ export function WorkflowRunnerWidget({
                   className="whitespace-nowrap rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] font-medium text-amber-700 transition hover:bg-amber-100/70"
                 >
                   {t("moderate50Btn")} (
-                  {getModerateSample(selectedPolicy.metricType, selectedPolicy.thresholdValue)}
+                  {formatNum(
+                    getModerateSample(selectedPolicy.metricType, selectedPolicy.thresholdValue)
+                  )}{" "}
                   {selectedUnit})
                 </button>
                 <button
@@ -468,7 +484,9 @@ export function WorkflowRunnerWidget({
                   className="whitespace-nowrap rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-medium text-rose-700 transition hover:bg-rose-100/70"
                 >
                   {t("severe100Btn")} (
-                  {getSevereSample(selectedPolicy.metricType, selectedPolicy.thresholdValue)}
+                  {formatNum(
+                    getSevereSample(selectedPolicy.metricType, selectedPolicy.thresholdValue)
+                  )}{" "}
                   {selectedUnit})
                 </button>
               </div>
@@ -540,15 +558,16 @@ export function WorkflowRunnerWidget({
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/70 pt-2.5 text-[11px] text-slate-600">
             <span>
               <strong className="font-medium text-slate-800">{t("tierRuleLabel")}</strong>{" "}
-              {t("moderateLabel")} ({selectedPolicy.thresholdValue}–
-              {livePreviewTier.severeCutoff - 0.1}
-              {selectedUnit}) = 50% · {t("severeLabel")} (≥ {livePreviewTier.severeCutoff}
-              {selectedUnit}) = 100%
+              {t("moderateLabel")} ({formatNum(selectedPolicy.thresholdValue)}–
+              {formatNum(livePreviewTier.severeCutoff - 0.1)} {selectedUnit}) = {formatNum(50)}% ·{" "}
+              {t("severeLabel")} (≥ {formatNum(livePreviewTier.severeCutoff)} {selectedUnit}) ={" "}
+              {formatNum(100)}%
             </span>
             <span className="font-medium text-slate-700">
               {t("projectedPayoutLabel")}{" "}
               <span className="font-semibold text-emerald-700">
-                {formatCurrency(livePreviewTier.payoutAmount)} ({livePreviewTier.payoutPercentage}%)
+                {formatTaka(livePreviewTier.payoutAmount)} (
+                {formatNum(livePreviewTier.payoutPercentage)}%)
               </span>
             </span>
           </div>
@@ -578,8 +597,8 @@ export function WorkflowRunnerWidget({
             <p className="font-semibold">{banner.title}</p>
             <p className="mt-0.5">{banner.detail}</p>
             {lastStepsExecuted.length > 0 && (
-              <p className="mt-1 font-mono text-[11px] opacity-85">
-                {t("executedPrefix")} {lastStepsExecuted.join(" → ")}
+              <p className="mt-1 text-[11px] opacity-85">
+                {t("executedPrefix")} {lastStepsExecuted.map(translateStepName).join(" → ")}
               </p>
             )}
           </div>
@@ -591,7 +610,7 @@ export function WorkflowRunnerWidget({
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
           <span className="font-medium text-slate-700">
             {t("pipelineProgressLabel")}
-            {inspectedClaim ? ` · ${inspectedClaim.policy.farm.name}` : ""}
+            {inspectedClaim ? ` · ${translateFarmName(inspectedClaim.policy.farm.name)}` : ""}
           </span>
           <span className="font-mono text-xs text-slate-600">
             {t("stepsPersistedLabel", {
@@ -669,7 +688,7 @@ export function WorkflowRunnerWidget({
                   </div>
 
                   <p className="mt-2 text-xs font-semibold text-slate-900">{t(stage.labelKey)}</p>
-                  <p className="font-mono text-[10px] text-slate-500">{stage.name}</p>
+                  <p className="text-[10px] text-slate-500">{translateStepName(stage.name)}</p>
 
                   {log ? (
                     <p className="mt-2 line-clamp-3 text-[11px] leading-relaxed text-slate-600">
@@ -683,9 +702,7 @@ export function WorkflowRunnerWidget({
                 <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 text-[10px] text-slate-500">
                   <span className="truncate">{translateStatus(stage.stateBadge)}</span>
                   {log && (
-                    <span className="shrink-0 font-mono">
-                      {new Date(log.timestamp).toLocaleTimeString()}
-                    </span>
+                    <span className="shrink-0 font-mono">{formatTime(log.timestamp)}</span>
                   )}
                 </div>
               </div>
@@ -705,15 +722,17 @@ export function WorkflowRunnerWidget({
               <span>
                 {t("beneficiaryLabel")}{" "}
                 <strong className="font-medium text-slate-900">
-                  {inspectedClaim.policy.farm.user.name}
+                  {translatePerson(inspectedClaim.policy.farm.user.name)}
                 </strong>
               </span>
               <span className="text-slate-300">|</span>
               <span>
                 {t("payoutLabel")}{" "}
                 <strong className="font-semibold text-slate-900">
-                  {formatCurrency(inspectedClaim.payoutAmount)}
-                  {inspectedClaim.payoutPercentage ? ` (${inspectedClaim.payoutPercentage}%)` : ""}
+                  {formatTaka(inspectedClaim.payoutAmount)}
+                  {inspectedClaim.payoutPercentage
+                    ? ` (${formatNum(inspectedClaim.payoutPercentage)}%)`
+                    : ""}
                 </strong>
               </span>
             </div>

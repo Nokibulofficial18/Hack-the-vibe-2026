@@ -33,7 +33,7 @@ import {
   getPayoutMethodMeta,
   maskBdMobileNumber,
 } from "@/lib/domain";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import {
   WorkflowRunnerWidget,
   type RunnerClaim,
@@ -78,7 +78,20 @@ const POLICY_STATUS_BADGE: Record<string, string> = {
 
 export function ClaimLedgerClient() {
   const { user, isAdmin, getAuthHeaders } = useAuth();
-  const { t, translateStatus, translateMetric } = useTranslation();
+  const {
+    t,
+    translateStatus,
+    translateMetric,
+    translatePerson,
+    translateFarmName,
+    translateMfs,
+    translateUnit,
+    translateStepName,
+    formatNum,
+    formatTaka,
+    formatDateTime,
+    formatTime,
+  } = useTranslation();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -282,7 +295,9 @@ export function ClaimLedgerClient() {
               <Sprout className="h-3.5 w-3.5 shrink-0 text-emerald-700" aria-hidden="true" />
             )}
             <span>
-              {isAdmin ? t("claimsRoleAdmin") : t("claimsRoleFarmer", { name: user.name })}
+              {isAdmin
+                ? t("claimsRoleAdmin")
+                : t("claimsRoleFarmer", { name: translatePerson(user.name) })}
             </span>
           </span>
           <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
@@ -300,7 +315,7 @@ export function ClaimLedgerClient() {
               {isAdmin ? t("reservePool") : t("walletBalance")}
             </p>
             <p className="text-lg font-semibold tracking-tight text-slate-900">
-              {formatCurrency(liveBalance)}
+              {formatTaka(liveBalance)}
             </p>
           </div>
         </div>
@@ -319,7 +334,7 @@ export function ClaimLedgerClient() {
           </div>
           <div className="mt-3">
             <p className="text-2xl font-semibold tracking-tight text-slate-900">
-              {formatCurrency(metrics.totalDisbursed)}
+              {formatTaka(metrics.totalDisbursed)}
             </p>
             <p className="mt-1 text-xs text-slate-500">
               {t("kpiSettledPayoutsSub", { count: metrics.disbursedCount })}
@@ -338,7 +353,7 @@ export function ClaimLedgerClient() {
           </div>
           <div className="mt-3">
             <p className="text-2xl font-semibold tracking-tight text-slate-900">
-              {metrics.totalClaims}
+              {formatNum(metrics.totalClaims)}
             </p>
             <p className="mt-1 text-xs text-slate-500">
               {t("kpiPausedFailedSub", {
@@ -360,7 +375,7 @@ export function ClaimLedgerClient() {
           </div>
           <div className="mt-3">
             <p className="text-2xl font-semibold tracking-tight text-slate-900">
-              {formatCurrency(metrics.activeLiability)}
+              {formatTaka(metrics.activeLiability)}
             </p>
             <p className="mt-1 text-xs text-slate-500">
               {t("kpiOpenContractsSub", { count: activePolicies.length })}
@@ -616,7 +631,7 @@ export function ClaimLedgerClient() {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-sm font-semibold text-slate-900">
-                            {claim.policy.farm.name}
+                            {translateFarmName(claim.policy.farm.name)}
                           </span>
                           <span
                             className={cn(
@@ -645,7 +660,8 @@ export function ClaimLedgerClient() {
                                   : "border-amber-200 bg-amber-50 text-amber-700"
                               )}
                             >
-                              {translateStatus(claim.severityTier)} ({claim.payoutPercentage ?? 50}%)
+                              {translateStatus(claim.severityTier)} (
+                              {formatNum(claim.payoutPercentage ?? 50)}%)
                             </span>
                           )}
                           <span
@@ -655,7 +671,7 @@ export function ClaimLedgerClient() {
                             )}
                           >
                             <Smartphone className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />
-                            {mfsMeta.label}
+                            {translateMfs(walletMethod)}
                           </span>
                         </div>
 
@@ -663,20 +679,25 @@ export function ClaimLedgerClient() {
                           <span>
                             {t("observedLabel")}{" "}
                             <strong className="font-medium text-slate-900">
-                              {claim.triggerValue}
-                              {meta.unit}
+                              {formatNum(claim.triggerValue)} {translateUnit(meta.unit)}
                             </strong>{" "}
-                            ({t("thresholdInline", { val: claim.policy.thresholdValue, unit: meta.unit })})
+                            (
+                            {t("thresholdInline", {
+                              val: formatNum(claim.policy.thresholdValue),
+                              unit: ` ${translateUnit(meta.unit)}`,
+                            })}
+                            )
                           </span>
                           <span className="text-slate-300">·</span>
                           <span>
-                            {claim.policy.farm.user.name} ({maskBdMobileNumber(walletPhone)})
+                            {translatePerson(claim.policy.farm.user.name)} (
+                            {formatNum(maskBdMobileNumber(walletPhone))})
                           </span>
                           {claim.transactionId ? (
                             <>
                               <span className="text-slate-300">·</span>
                               <span className="font-mono text-[11px] font-medium text-slate-700">
-                                Txn: {claim.transactionId}
+                                {t("txnShortPrefix")} {claim.transactionId}
                               </span>
                             </>
                           ) : (
@@ -723,11 +744,11 @@ export function ClaimLedgerClient() {
                             claim.status === "DISBURSED" ? "text-emerald-700" : "text-amber-700"
                           )}
                         >
-                          {formatCurrency(claim.payoutAmount)}
+                          {formatTaka(claim.payoutAmount)}
                         </p>
                         <p className="text-[11px] text-slate-500">
                           {t("stepProgressInline", { step: claim.currentStep })} ·{" "}
-                          {new Date(claim.createdAt).toLocaleString()}
+                          {formatDateTime(claim.createdAt)}
                         </p>
                       </div>
                     </div>
@@ -742,7 +763,7 @@ export function ClaimLedgerClient() {
                         <span className="text-xs text-slate-600">
                           {t("maxCapLabel")}{" "}
                           <strong className="font-medium text-slate-900">
-                            {formatCurrency(claim.policy.coverageAmount)}
+                            {formatTaka(claim.policy.coverageAmount)}
                           </strong>{" "}
                           · {t("keyLabel")}{" "}
                           <span className="font-mono text-[11px]">{claim.idempotencyKey}</span>
@@ -785,7 +806,7 @@ export function ClaimLedgerClient() {
                               <div>
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-semibold text-slate-900">
-                                    #{idx + 1} · {log.stepName}
+                                    #{formatNum(idx + 1)} · {translateStepName(log.stepName)}
                                   </span>
                                   <span
                                     className={cn(
@@ -810,7 +831,7 @@ export function ClaimLedgerClient() {
                               </div>
                             </div>
                             <span className="font-mono text-[11px] text-slate-400">
-                              {new Date(log.timestamp).toLocaleTimeString()}
+                              {formatTime(log.timestamp)}
                             </span>
                           </li>
                         ))}

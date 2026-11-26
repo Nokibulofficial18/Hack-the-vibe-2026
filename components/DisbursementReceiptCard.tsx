@@ -11,12 +11,8 @@ import {
 } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { useToast } from "@/components/ToastProvider";
-import {
-  getMetricMeta,
-  getPayoutMethodMeta,
-  maskBdMobileNumber,
-} from "@/lib/domain";
-import { cn, formatCurrency } from "@/lib/utils";
+import { getMetricMeta, maskBdMobileNumber } from "@/lib/domain";
+import { cn } from "@/lib/utils";
 
 export interface ReceiptClaimData {
   id: string;
@@ -54,13 +50,28 @@ export function DisbursementReceiptCard({
   claim: ReceiptClaimData;
   compact?: boolean;
 }) {
-  const { t, translateStatus } = useTranslation();
+  const {
+    t,
+    translateStatus,
+    translateMfs,
+    translateMfsTagline,
+    translatePerson,
+    translateFarmName,
+    translateCrop,
+    translateMetricShort,
+    translateUnit,
+    formatNum,
+    formatTaka,
+    formatDateTime,
+  } = useTranslation();
   const { toast } = useToast();
   const method = claim.payoutMethod ?? claim.policy.farm.user.payoutMethod ?? "BKASH";
-  const mfs = getPayoutMethodMeta(method);
+  const mfsLabel = translateMfs(method);
+  const mfsTagline = translateMfsTagline(method);
   const metric = getMetricMeta(claim.policy.metricType);
+  const unitLabel = translateUnit(metric.unit);
   const rawPhone = claim.recipientPhone ?? claim.policy.farm.user.mobileNumber ?? "+8801711000000";
-  const maskedPhone = maskBdMobileNumber(rawPhone);
+  const maskedPhone = formatNum(maskBdMobileNumber(rawPhone));
   const txnId = claim.transactionId ?? `SIM-${claim.id.slice(0, 10).toUpperCase()}`;
   const settledAt = claim.disbursedAt ?? claim.createdAt;
   const tierLabel =
@@ -76,12 +87,12 @@ export function DisbursementReceiptCard({
       toast({
         variant: "success",
         title: t("txnCopiedTitle"),
-        description: `${mfs.label}: ${txnId}`,
+        description: `${mfsLabel}: ${txnId}`,
       });
     } catch {
       toast({
         variant: "info",
-        title: t("txnIdLabel", { method: mfs.label }),
+        title: t("txnIdLabel", { method: mfsLabel }),
         description: txnId,
       });
     }
@@ -89,7 +100,7 @@ export function DisbursementReceiptCard({
 
   return (
     <div
-      aria-label={t("receiptTitle", { method: mfs.label })}
+      aria-label={t("receiptTitle", { method: mfsLabel })}
       className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-xs"
     >
       {/* Minimalist Receipt Header */}
@@ -100,10 +111,10 @@ export function DisbursementReceiptCard({
           </div>
           <div>
             <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
-              {mfs.tagline}
+              {mfsTagline}
             </p>
             <h3 className="text-sm font-semibold text-slate-900">
-              {t("receiptTitle", { method: mfs.label })}
+              {t("receiptTitle", { method: mfsLabel })}
             </h3>
           </div>
         </div>
@@ -122,7 +133,7 @@ export function DisbursementReceiptCard({
               {t("amountCreditedLabel")}
             </p>
             <p className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
-              {formatCurrency(claim.payoutAmount)}
+              {formatTaka(claim.payoutAmount)}
             </p>
           </div>
           <div className="text-right">
@@ -137,7 +148,7 @@ export function DisbursementReceiptCard({
               {tierLabel}
             </span>
             <p className="mt-1 text-[11px] text-slate-500">
-              {t("ofPolicyCoverage", { amount: formatCurrency(claim.policy.coverageAmount) })}
+              {t("ofPolicyCoverage", { amount: formatTaka(claim.policy.coverageAmount) })}
             </p>
           </div>
         </div>
@@ -152,14 +163,14 @@ export function DisbursementReceiptCard({
       >
         <div>
           <dt className="text-[11px] font-medium text-slate-500">
-            {t("txnIdLabel", { method: mfs.label })}
+            {t("txnIdLabel", { method: mfsLabel })}
           </dt>
           <dd className="mt-0.5 flex items-center gap-1.5 font-mono text-sm font-semibold text-slate-900">
             <span>{txnId}</span>
             <button
               type="button"
               onClick={handleCopyTxn}
-              aria-label={`Copy ${mfs.label} transaction ID ${txnId}`}
+              aria-label={`Copy ${mfsLabel} transaction ID ${txnId}`}
               className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
             >
               <Copy className="h-3.5 w-3.5" aria-hidden="true" />
@@ -169,44 +180,45 @@ export function DisbursementReceiptCard({
 
         <div>
           <dt className="text-[11px] font-medium text-slate-500">{t("disbursementTimeLabel")}</dt>
-          <dd className="mt-0.5 font-mono font-medium text-slate-900">
-            {new Date(settledAt).toLocaleString("en-GB", {
-              timeZone: "Asia/Dhaka",
-              dateStyle: "medium",
-              timeStyle: "medium",
-            })}{" "}
-            BST
+          <dd className="mt-0.5 font-medium text-slate-900">
+            {formatDateTime(settledAt)} {t("bstTimezone")}
           </dd>
         </div>
 
         <div>
           <dt className="text-[11px] font-medium text-slate-500">{t("beneficiaryFarmerLabel")}</dt>
-          <dd className="mt-0.5 font-semibold text-slate-900">{claim.policy.farm.user.name}</dd>
+          <dd className="mt-0.5 font-semibold text-slate-900">
+            {translatePerson(claim.policy.farm.user.name)}
+          </dd>
         </div>
 
         <div>
           <dt className="text-[11px] font-medium text-slate-500">{t("maskedWalletLabel")}</dt>
-          <dd className="mt-0.5 font-mono font-medium text-slate-900">
-            {mfs.label} · {maskedPhone}
+          <dd className="mt-0.5 font-medium text-slate-900">
+            {mfsLabel} · <span className="font-mono">{maskedPhone}</span>
           </dd>
         </div>
 
         <div>
           <dt className="text-[11px] font-medium text-slate-500">{t("insuredFarmLabel")}</dt>
           <dd className="mt-0.5 font-medium text-slate-800">
-            {claim.policy.farm.name} ({claim.policy.farm.cropType})
+            {translateFarmName(claim.policy.farm.name)} ({translateCrop(claim.policy.farm.cropType)})
           </dd>
         </div>
 
         <div>
           <dt className="text-[11px] font-medium text-slate-500">{t("weatherTriggerLabel")}</dt>
           <dd className="mt-0.5 text-slate-700">
-            {claim.policy.metricType}:{" "}
+            {translateMetricShort(claim.policy.metricType)}:{" "}
             <strong className="font-semibold text-slate-900">
-              {claim.triggerValue}
-              {metric.unit}
+              {formatNum(claim.triggerValue)} {unitLabel}
             </strong>{" "}
-            ({t("thresholdInline", { val: claim.policy.thresholdValue, unit: metric.unit })})
+            (
+            {t("thresholdInline", {
+              val: formatNum(claim.policy.thresholdValue),
+              unit: ` ${unitLabel}`,
+            })}
+            )
           </dd>
         </div>
       </dl>
