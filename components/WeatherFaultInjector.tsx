@@ -71,7 +71,8 @@ export function WeatherFaultInjector({
   isRunning,
   lastResults,
 }: WeatherFaultInjectorProps) {
-  const { t, translateStatus } = useTranslation();
+  const { t, translateStatus, translateFarmName, translateAttemptStatus, formatNum } =
+    useTranslation();
   const [targetFarmId, setTargetFarmId] = useState<string>(farms[0]?.id ?? "ALL");
   const [elapsedMs, setElapsedMs] = useState(0);
 
@@ -129,7 +130,7 @@ export function WeatherFaultInjector({
           >
             {farms.map((farm) => (
               <option key={farm.id} value={farm.id}>
-                {farm.name}
+                {translateFarmName(farm.name)}
               </option>
             ))}
             <option value="ALL">{t("allMonitoredFarmsOption", { count: farms.length })}</option>
@@ -239,7 +240,9 @@ export function WeatherFaultInjector({
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-slate-900">{res.farmName}</span>
+                  <span className="text-xs font-semibold text-slate-900">
+                    {translateFarmName(res.farmName)}
+                  </span>
                   <span
                     className={cn(
                       "inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium",
@@ -284,15 +287,15 @@ export function WeatherFaultInjector({
                     >
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-mono text-[11px] font-medium text-slate-500">
-                          #{log.attempt}
+                          #{formatNum(log.attempt)}
                         </span>
                         <span
                           className={cn(
-                            "whitespace-nowrap rounded-full border px-2 py-0.5 font-mono text-[10px] font-medium",
+                            "whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-medium",
                             ATTEMPT_BADGE[log.status] ?? "border-slate-200 bg-slate-100 text-slate-700"
                           )}
                         >
-                          {log.status}
+                          {translateAttemptStatus(log.status)}
                         </span>
                         <span className="text-slate-700">{log.message}</span>
                       </div>

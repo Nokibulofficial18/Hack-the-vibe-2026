@@ -8,7 +8,6 @@ import { useTranslation } from "@/lib/i18n";
 import { useToast } from "@/components/ToastProvider";
 import {
   PAYOUT_METHOD_OPTIONS,
-  getPayoutMethodMeta,
   maskBdMobileNumber,
   validateBdMobileNumber,
   type PayoutMethodType,
@@ -25,7 +24,7 @@ interface FarmerWalletInfo {
 
 export function MobileWalletCard() {
   const { user, isAdmin, getAuthHeaders } = useAuth();
-  const { t } = useTranslation();
+  const { t, translateMfs, translatePerson, formatNum } = useTranslation();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -136,13 +135,12 @@ export function MobileWalletCard() {
         return;
       }
 
-      const meta = getPayoutMethodMeta(payoutMethod);
       setMobileNumber(check.normalized);
       setPhoneError(null);
       toast({
         variant: "success",
         title: t("walletSavedTitle"),
-        description: `${data.user?.name ?? user.name} → ${meta.label} (${maskBdMobileNumber(check.normalized)})`,
+        description: `${translatePerson(data.user?.name ?? user.name)} → ${translateMfs(payoutMethod)} (${formatNum(maskBdMobileNumber(check.normalized))})`,
       });
       await loadProfile();
       router.refresh();
@@ -156,8 +154,6 @@ export function MobileWalletCard() {
       setSaving(false);
     }
   };
-
-  const activeMeta = getPayoutMethodMeta(payoutMethod);
 
   return (
     <section
@@ -179,7 +175,7 @@ export function MobileWalletCard() {
 
         <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          {activeMeta.label} · {maskBdMobileNumber(mobileNumber)}
+          {translateMfs(payoutMethod)} · {formatNum(maskBdMobileNumber(mobileNumber))}
         </span>
       </div>
 
@@ -200,7 +196,8 @@ export function MobileWalletCard() {
               >
                 {farmers.map((f) => (
                   <option key={f.id} value={f.id}>
-                    {f.name} ({getPayoutMethodMeta(f.payoutMethod).label} · {maskBdMobileNumber(f.mobileNumber)})
+                    {translatePerson(f.name)} ({translateMfs(f.payoutMethod)} ·{" "}
+                    {formatNum(maskBdMobileNumber(f.mobileNumber))})
                   </option>
                 ))}
               </select>
@@ -233,7 +230,7 @@ export function MobileWalletCard() {
                           : "text-slate-600 hover:bg-white hover:text-slate-900"
                       )}
                     >
-                      {opt.label}
+                      {translateMfs(opt.id)}
                     </button>
                   );
                 })}
@@ -276,7 +273,7 @@ export function MobileWalletCard() {
                 </p>
               ) : (
                 <p id="bd-phone-hint" className="mt-1 text-[11px] text-slate-500">
-                  {t("maskedReceiptPreview", { phone: maskBdMobileNumber(mobileNumber) })}
+                  {t("maskedReceiptPreview", { phone: formatNum(maskBdMobileNumber(mobileNumber)) })}
                 </p>
               )}
             </div>

@@ -13,8 +13,8 @@ import {
   Wallet,
 } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
-import { getPayoutMethodMeta, maskBdMobileNumber } from "@/lib/domain";
-import { cn, formatCurrency, formatLandArea } from "@/lib/utils";
+import { getMetricMeta, maskBdMobileNumber } from "@/lib/domain";
+import { cn } from "@/lib/utils";
 import { MobileWalletCard } from "@/components/MobileWalletCard";
 
 export interface OverviewPolicyRow {
@@ -65,7 +65,19 @@ export function OverviewClient({
   weatherCacheCount,
   policies,
 }: OverviewClientProps) {
-  const { t, translateStatus } = useTranslation();
+  const {
+    t,
+    translateStatus,
+    translatePerson,
+    translateMfs,
+    translateFarmName,
+    translateCrop,
+    translateMetricShort,
+    translateUnit,
+    formatNum,
+    formatTaka,
+    formatArea,
+  } = useTranslation();
   const isAdmin = currentUser.role === "ADMIN";
 
   const modules = [
@@ -114,7 +126,7 @@ export function OverviewClient({
               <span>{isAdmin ? t("overviewEyebrowAdmin") : t("overviewEyebrowFarmer")}</span>
             </span>
             <h1 className="mt-2.5 text-2xl font-semibold tracking-tight text-white">
-              {t("welcomeBack", { name: currentUser.name })}
+              {t("welcomeBack", { name: translatePerson(currentUser.name) })}
             </h1>
             <p className="mt-1 max-w-2xl text-sm text-emerald-100/90">
               {t("heroRiskSummary", {
@@ -136,11 +148,11 @@ export function OverviewClient({
                   {isAdmin ? t("reservePool") : t("walletBalance")}
                 </p>
                 <p className="text-base font-semibold tracking-tight text-white">
-                  {formatCurrency(currentUser.balance)}
+                  {formatTaka(currentUser.balance)}
                 </p>
                 <p className="text-[11px] text-emerald-100/80">
-                  {getPayoutMethodMeta(currentUser.payoutMethod).label} ·{" "}
-                  {maskBdMobileNumber(currentUser.mobileNumber)}
+                  {translateMfs(currentUser.payoutMethod)} ·{" "}
+                  {formatNum(maskBdMobileNumber(currentUser.mobileNumber))}
                 </p>
               </div>
             </div>
@@ -168,7 +180,9 @@ export function OverviewClient({
             </div>
           </div>
           <div className="mt-3">
-            <p className="text-2xl font-semibold tracking-tight text-slate-900">{farmsCount}</p>
+            <p className="text-2xl font-semibold tracking-tight text-slate-900">
+              {formatNum(farmsCount)}
+            </p>
             <p className="mt-1 text-xs text-slate-600">
               {isAdmin ? t("monitoredFarmsSubAdmin") : t("monitoredFarmsSubFarmer")}
             </p>
@@ -186,7 +200,7 @@ export function OverviewClient({
           </div>
           <div className="mt-3">
             <p className="text-2xl font-semibold tracking-tight text-slate-900">
-              {activePoliciesCount}
+              {formatNum(activePoliciesCount)}
             </p>
             <p className="mt-1 text-xs text-slate-600">
               {t("totalContractsCount", { count: totalPoliciesCount })}
@@ -205,7 +219,7 @@ export function OverviewClient({
           </div>
           <div className="mt-3">
             <p className="text-2xl font-semibold tracking-tight text-slate-900">
-              {formatCurrency(totalCoverage)}
+              {formatTaka(totalCoverage)}
             </p>
             <p className="mt-1 text-xs text-slate-600">{t("totalCoverageSub")}</p>
           </div>
@@ -222,7 +236,7 @@ export function OverviewClient({
           </div>
           <div className="mt-3">
             <p className="text-2xl font-semibold tracking-tight text-slate-900">
-              {formatCurrency(totalPayouts)}
+              {formatTaka(totalPayouts)}
             </p>
             <p className="mt-1 text-xs text-slate-600">
               {t("claimsAndSnapshots", { claims: claimsCount, snapshots: weatherCacheCount })}
@@ -294,44 +308,50 @@ export function OverviewClient({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {policies.map((policy) => (
-                <tr key={policy.id} className="transition hover:bg-slate-50/80">
-                  <td className="px-4 py-3.5">
-                    <div className="font-medium text-slate-900">{policy.farm.name}</div>
-                    <div className="text-xs text-slate-500">
-                      {policy.farm.cropType} · {formatLandArea(policy.farm.sizeHectares)}
-                    </div>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3.5 font-mono text-xs text-slate-600">
-                    {policy.farm.latitude.toFixed(4)}, {policy.farm.longitude.toFixed(4)}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3.5">
-                    <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-[11px] font-medium text-slate-700">
-                      {policy.metricType}
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3.5 font-medium text-slate-900">
-                    {policy.thresholdValue}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3.5 font-semibold text-slate-900">
-                    {formatCurrency(policy.coverageAmount)}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3.5">
-                    <span
-                      className={cn(
-                        "inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium",
-                        policy.status === "ACTIVE"
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                          : policy.status === "CLAIMED"
-                            ? "border-amber-200 bg-amber-50 text-amber-700"
-                            : "border-slate-200 bg-slate-100 text-slate-700"
-                      )}
-                    >
-                      {translateStatus(policy.status)}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {policies.map((policy) => {
+                const meta = getMetricMeta(policy.metricType);
+                return (
+                  <tr key={policy.id} className="transition hover:bg-slate-50/80">
+                    <td className="px-4 py-3.5">
+                      <div className="font-medium text-slate-900">
+                        {translateFarmName(policy.farm.name)}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        {translateCrop(policy.farm.cropType)} · {formatArea(policy.farm.sizeHectares)}
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3.5 font-mono text-xs text-slate-600">
+                      {formatNum(policy.farm.latitude.toFixed(4))},{" "}
+                      {formatNum(policy.farm.longitude.toFixed(4))}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3.5">
+                      <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                        {translateMetricShort(policy.metricType)}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3.5 font-medium text-slate-900">
+                      {formatNum(policy.thresholdValue)} {translateUnit(meta.unit)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3.5 font-semibold text-slate-900">
+                      {formatTaka(policy.coverageAmount)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3.5">
+                      <span
+                        className={cn(
+                          "inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium",
+                          policy.status === "ACTIVE"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            : policy.status === "CLAIMED"
+                              ? "border-amber-200 bg-amber-50 text-amber-700"
+                              : "border-slate-200 bg-slate-100 text-slate-700"
+                        )}
+                      >
+                        {translateStatus(policy.status)}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

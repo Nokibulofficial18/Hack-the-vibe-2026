@@ -16,7 +16,6 @@ import {
 } from "recharts";
 import { getMetricMeta, getSevereThresholdCutoff } from "@/lib/domain";
 import { useTranslation } from "@/lib/i18n";
-import { formatCurrency } from "@/lib/utils";
 import type { MapFarmItem } from "@/components/BangladeshRiskMap";
 
 export interface DistrictChartPoint {
@@ -34,18 +33,22 @@ interface AdminAnalyticsChartsProps {
   isAdmin: boolean;
 }
 
-function formatCompactTaka(value: number): string {
-  if (value >= 100000) return `৳${(value / 100000).toFixed(1)}L`;
-  if (value >= 1000) return `৳${Math.round(value / 1000)}k`;
-  return `৳${value}`;
-}
-
 export function AdminAnalyticsCharts({
   byDistrict,
   farms,
   isAdmin,
 }: AdminAnalyticsChartsProps) {
-  const { t } = useTranslation();
+  const {
+    isBangla,
+    t,
+    translateDistrict,
+    translateCrop,
+    translateMetricShort,
+    translateUnit,
+    formatNum,
+    formatTaka,
+    formatDayLabel,
+  } = useTranslation();
   const [selectedFarmId, setSelectedFarmId] = useState<string>(farms[0]?.id ?? "");
 
   useEffect(() => {
@@ -65,12 +68,36 @@ export function AdminAnalyticsCharts({
     );
   }, [activeFarm]);
 
+  const localizedDistrictData = useMemo(
+    () =>
+      byDistrict.map((d) => ({
+        ...d,
+        districtLabel: translateDistrict(d.district),
+      })),
+    [byDistrict, translateDistrict]
+  );
+
   const trendData = useMemo(() => {
     if (!activeFarm?.weather?.forecast7d?.length) return [];
-    return activeFarm.weather.forecast7d;
-  }, [activeFarm]);
+    return activeFarm.weather.forecast7d.map((pt) => ({
+      ...pt,
+      localizedDay: formatDayLabel(pt.date),
+    }));
+  }, [activeFarm, formatDayLabel]);
+
+  const formatCompactTaka = (value: number): string => {
+    if (isBangla) {
+      if (value >= 100000) return `৳${formatNum((value / 100000).toFixed(1))}লক্ষ`;
+      if (value >= 1000) return `৳${formatNum(Math.round(value / 1000))}হাজার`;
+      return `৳${formatNum(value)}`;
+    }
+    if (value >= 100000) return `৳${(value / 100000).toFixed(1)}L`;
+    if (value >= 1000) return `৳${Math.round(value / 1000)}k`;
+    return `৳${value}`;
+  };
 
   const primaryMeta = primaryPolicy ? getMetricMeta(primaryPolicy.metricType) : null;
+  const primaryUnit = primaryMeta ? translateUnit(primaryMeta.unit) : "";
   const severeCutoff = primaryPolicy
     ? getSevereThresholdCutoff(primaryPolicy.metricType, primaryPolicy.thresholdValue)
     : null;
@@ -98,13 +125,16 @@ export function AdminAnalyticsCharts({
         </div>
 
         <div className="mt-4 h-56 w-full">
-          {byDistrict.length === 0 ? (
+          {localizedDistrictData.length === 0 ? (
             <div className="flex h-full items-center justify-center text-xs text-slate-500">
               {t("noDistrictChartData")}
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={byDistrict} margin={{ top: 8, right: 12, left: 4, bottom: 4 }}>
+              <BarChart
+                data={localizedDistrictData}
+                margin={{ top: 8, right: 12, left: 4, bottom: 4 }}
+              >
                 <defs>
                   <linearGradient id="coverageBarGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#059669" stopOpacity={0.95} />
@@ -117,7 +147,7 @@ export function AdminAnalyticsCharts({
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
                 <XAxis
-                  dataKey="district"
+                  dataKey="districtLabel"
                   tick={{ fill: "#475569", fontSize: 11, fontWeight: 500 }}
                   axisLine={{ stroke: "#E2E8F0" }}
                   tickLine={false}
@@ -127,11 +157,11 @@ export function AdminAnalyticsCharts({
                   tick={{ fill: "#64748B", fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
-                  width={54}
+                  width={isBangla ? 66 : 54}
                 />
                 <Tooltip
                   formatter={(value: unknown, name: unknown) => [
-                    formatCurrency(Number(value ?? 0)),
+                    formatTaka(Number(value ?? 0)),
                     String(name),
                   ]}
                   contentStyle={{
@@ -191,7 +221,7 @@ export function AdminAnalyticsCharts({
               >
                 {farms.map((farm) => (
                   <option key={farm.id} value={farm.id}>
-                    {farm.district} — {farm.cropType}
+                    {translateDistrict(farm.district)} — {translateCrop(farm.cropType)}
                   </option>
                 ))}
               </select>
@@ -202,13 +232,12 @@ export function AdminAnalyticsCharts({
         {primaryPolicy && primaryMeta && (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-medium">
             <span className="whitespace-nowrap rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-rose-700">
-              {t("triggerLabel")} ({primaryPolicy.metricType}): {primaryPolicy.thresholdValue}
-              {primaryMeta.unit}
+              {t("triggerLabel")} ({translateMetricShort(primaryPolicy.metricType)}):{" "}
+              {formatNum(primaryPolicy.thresholdValue)} {primaryUnit}
             </span>
             {severeCutoff !== null && (
               <span className="whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-slate-600">
-                {t("severe100Label")}: {severeCutoff}
-                {primaryMeta.unit}
+                {t("severe100Label")}: {formatNum(severeCutoff)} {primaryUnit}
               </span>
             )}
           </div>
@@ -234,7 +263,7 @@ export function AdminAnalyticsCharts({
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
                 <XAxis
-                  dataKey="dayLabel"
+                  dataKey="localizedDay"
                   tick={{ fill: "#475569", fontSize: 11 }}
                   axisLine={{ stroke: "#E2E8F0" }}
                   tickLine={false}
@@ -242,23 +271,27 @@ export function AdminAnalyticsCharts({
                 <YAxis
                   yAxisId="rain"
                   orientation="left"
-                  unit="mm"
+                  tickFormatter={(v: number) => `${formatNum(v)}${translateUnit("mm")}`}
                   tick={{ fill: "#64748B", fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
-                  width={46}
+                  width={isBangla ? 56 : 48}
                 />
                 <YAxis
                   yAxisId="temp"
                   orientation="right"
-                  unit="°C"
+                  tickFormatter={(v: number) => `${formatNum(v)}${translateUnit("°C")}`}
                   domain={[20, 46]}
                   tick={{ fill: "#64748B", fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
-                  width={42}
+                  width={isBangla ? 50 : 44}
                 />
                 <Tooltip
+                  formatter={(value: unknown, name: unknown) => [
+                    formatNum(Number(value ?? 0)),
+                    String(name),
+                  ]}
                   contentStyle={{
                     backgroundColor: "#FFFFFF",
                     borderColor: "#E2E8F0",
@@ -302,7 +335,7 @@ export function AdminAnalyticsCharts({
                       strokeWidth={1.5}
                       strokeDasharray="5 4"
                       label={{
-                        value: `${t("triggerLabel")} ${primaryPolicy.thresholdValue}${primaryMeta?.unit ?? ""}`,
+                        value: `${t("triggerLabel")} ${formatNum(primaryPolicy.thresholdValue)} ${primaryUnit}`,
                         position: "insideTopRight",
                         fill: "#E11D48",
                         fontSize: 10,

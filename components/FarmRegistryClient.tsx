@@ -29,8 +29,6 @@ import {
   acresToHectares,
   bighaToHectares,
   cn,
-  formatCurrency,
-  formatLandArea,
   hectaresToAcres,
   hectaresToBigha,
 } from "@/lib/utils";
@@ -81,7 +79,20 @@ function projectToBdMap(lat: number, lon: number): { x: number; y: number; inBou
 
 export function FarmRegistryClient() {
   const { user, isAdmin, getAuthHeaders } = useAuth();
-  const { t, translateStatus } = useTranslation();
+  const {
+    t,
+    translateStatus,
+    translatePerson,
+    translateDistrict,
+    translateRiskProfile,
+    translateCrop,
+    translateFarmName,
+    translateMetricShort,
+    translateValidationError,
+    formatNum,
+    formatTaka,
+    formatArea,
+  } = useTranslation();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -193,8 +204,12 @@ export function FarmRegistryClient() {
     });
 
     if (!validation.valid) {
-      setFieldErrors(validation.errors);
-      const firstError = Object.values(validation.errors)[0];
+      const translatedErrors: Record<string, string> = {};
+      for (const [k, v] of Object.entries(validation.errors)) {
+        translatedErrors[k] = translateValidationError(v);
+      }
+      setFieldErrors(translatedErrors);
+      const firstError = Object.values(translatedErrors)[0];
       setFormError(t("farmFixErrors"));
       toast({
         variant: "error",
@@ -239,10 +254,10 @@ export function FarmRegistryClient() {
       }
 
       const msg = t("farmRegSuccessDesc", {
-        name: data.farm?.name ?? name,
-        area: formatLandArea(computedHectares),
-        lat: latitude,
-        lon: longitude,
+        name: translateFarmName(data.farm?.name ?? name),
+        area: formatArea(computedHectares),
+        lat: formatNum(latitude),
+        lon: formatNum(longitude),
       });
       setSuccessMessage(msg);
       toast({ variant: "success", title: t("farmRegSuccessTitle"), description: msg });
@@ -261,7 +276,7 @@ export function FarmRegistryClient() {
   const handleDeleteFarm = async (farm: FarmRecord) => {
     const policyCount = farm.policies.length;
     const confirmed = window.confirm(
-      t("farmDeleteConfirm", { name: farm.name, count: policyCount })
+      t("farmDeleteConfirm", { name: translateFarmName(farm.name), count: policyCount })
     );
     if (!confirmed) return;
 
@@ -280,7 +295,10 @@ export function FarmRegistryClient() {
         toast({ variant: "error", title: t("farmDeleteFailedTitle"), description: msg });
         return;
       }
-      const msg = t("farmDeleteSuccessDesc", { name: farm.name, count: policyCount });
+      const msg = t("farmDeleteSuccessDesc", {
+        name: translateFarmName(farm.name),
+        count: policyCount,
+      });
       setSuccessMessage(msg);
       toast({ variant: "info", title: t("farmDeleteSuccessTitle"), description: msg });
       await loadFarms();
@@ -338,7 +356,9 @@ export function FarmRegistryClient() {
             ) : (
               <Sprout className="h-3.5 w-3.5 shrink-0 text-emerald-700" aria-hidden="true" />
             )}
-            <span>{isAdmin ? t("farmsRoleAdmin") : t("farmsRoleFarmer", { name: user.name })}</span>
+            <span>
+              {isAdmin ? t("farmsRoleAdmin") : t("farmsRoleFarmer", { name: translatePerson(user.name) })}
+            </span>
           </span>
           <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
             {t("farmsHeading")}
@@ -368,7 +388,7 @@ export function FarmRegistryClient() {
           </div>
           <div className="mt-3">
             <p className="text-2xl font-semibold tracking-tight text-slate-900">
-              {summary.plotCount}
+              {formatNum(summary.plotCount)}
             </p>
             <p className="mt-1 text-xs text-slate-500">{t("kpiRegisteredPlotsSub")}</p>
           </div>
@@ -385,10 +405,10 @@ export function FarmRegistryClient() {
           </div>
           <div className="mt-3">
             <p className="text-2xl font-semibold tracking-tight text-slate-900">
-              {summary.totalBigha.toFixed(1)} {t("unitBigha")}
+              {formatNum(summary.totalBigha.toFixed(1))} {t("unitBigha")}
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              {t("kpiTotalCultivatedSub", { acres: summary.totalAcres.toFixed(2) })}
+              {t("kpiTotalCultivatedSub", { acres: formatNum(summary.totalAcres.toFixed(2)) })}
             </p>
           </div>
         </div>
@@ -404,7 +424,7 @@ export function FarmRegistryClient() {
           </div>
           <div className="mt-3">
             <p className="text-2xl font-semibold tracking-tight text-slate-900">
-              {formatCurrency(summary.totalActiveCoverage)}
+              {formatTaka(summary.totalActiveCoverage)}
             </p>
             <p className="mt-1 text-xs text-slate-500">{t("kpiActivePlotCoverageSub")}</p>
           </div>
@@ -461,7 +481,7 @@ export function FarmRegistryClient() {
                 >
                   {farmers.map((f) => (
                     <option key={f.id} value={f.id}>
-                      {f.name} ({f.email})
+                      {translatePerson(f.name)} ({f.email})
                     </option>
                   ))}
                 </select>
@@ -483,7 +503,8 @@ export function FarmRegistryClient() {
               >
                 {BANGLADESH_DISTRICTS.map((d) => (
                   <option key={d.id} value={d.id}>
-                    {d.name} — {d.riskProfile} ({d.defaultCrop})
+                    {translateDistrict(d.name)} — {translateRiskProfile(d.riskProfile)} (
+                    {translateCrop(d.defaultCrop)})
                   </option>
                 ))}
                 {selectedDistrictId === "custom" && (
@@ -581,8 +602,8 @@ export function FarmRegistryClient() {
                 />
                 {computedHectares > 0 && (
                   <p className="mt-1 text-[11px] text-slate-500">
-                    ≈ {hectaresToBigha(computedHectares).toFixed(1)} {t("unitBigha")} ·{" "}
-                    {hectaresToAcres(computedHectares).toFixed(2)} {t("unitAcres")}
+                    ≈ {formatNum(hectaresToBigha(computedHectares).toFixed(1))} {t("unitBigha")} ·{" "}
+                    {formatNum(hectaresToAcres(computedHectares).toFixed(2))} {t("unitAcres")}
                   </p>
                 )}
                 {fieldErrors.sizeHectares && (
@@ -645,7 +666,7 @@ export function FarmRegistryClient() {
                         fontWeight={isSelected ? "600" : "500"}
                         fill={isSelected ? "#047857" : "#475569"}
                       >
-                        {d.name.split(" ")[0]}
+                        {translateDistrict(d.name.split(" ")[0])}
                       </text>
                     </g>
                   );
@@ -685,7 +706,7 @@ export function FarmRegistryClient() {
                         : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"
                     )}
                   >
-                    {district.name}
+                    {translateDistrict(district.name)}
                   </button>
                 ))}
               </div>
@@ -797,7 +818,7 @@ export function FarmRegistryClient() {
                   {t("registeredPlotsHeading")}
                 </h2>
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                  {filteredFarms.length}
+                  {formatNum(filteredFarms.length)}
                 </span>
               </div>
               <div className="relative w-full sm:w-64">
@@ -840,30 +861,33 @@ export function FarmRegistryClient() {
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-sm font-semibold text-slate-900">{farm.name}</h3>
+                            <h3 className="text-sm font-semibold text-slate-900">
+                              {translateFarmName(farm.name)}
+                            </h3>
                             <span className="whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700">
-                              {farm.cropType}
+                              {translateCrop(farm.cropType)}
                             </span>
                             {isAdmin && (
                               <span className="whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium text-slate-600">
-                                {farm.user.name}
+                                {translatePerson(farm.user.name)}
                               </span>
                             )}
                           </div>
                           <div className="mt-1.5 flex flex-wrap items-center gap-2.5 text-xs text-slate-500">
                             <span className="inline-flex items-center gap-1 font-mono text-slate-600">
                               <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
-                              {farm.latitude.toFixed(4)}, {farm.longitude.toFixed(4)}
+                              {formatNum(farm.latitude.toFixed(4))},{" "}
+                              {formatNum(farm.longitude.toFixed(4))}
                             </span>
                             <span className="text-slate-300">·</span>
                             <span className="font-medium text-slate-700">
-                              {formatLandArea(farm.sizeHectares)}
+                              {formatArea(farm.sizeHectares)}
                             </span>
                             <span className="text-slate-300">·</span>
                             <span>
                               {t("activePolicySummary", { count: activePolicies.length })} (
                               <span className="font-medium text-slate-800">
-                                {formatCurrency(totalCoverage)}
+                                {formatTaka(totalCoverage)}
                               </span>
                               )
                             </span>
@@ -898,13 +922,13 @@ export function FarmRegistryClient() {
                               key={policy.id}
                               className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] text-slate-700"
                             >
-                              <span className="font-mono font-medium text-slate-800">
-                                {policy.metricType}
+                              <span className="font-medium text-slate-800">
+                                {translateMetricShort(policy.metricType)}
                               </span>
-                              <span>≥ {policy.thresholdValue}</span>
+                              <span>≥ {formatNum(policy.thresholdValue)}</span>
                               <span className="text-slate-300">·</span>
                               <span className="font-medium text-slate-900">
-                                {formatCurrency(policy.coverageAmount)}
+                                {formatTaka(policy.coverageAmount)}
                               </span>
                               <span
                                 className={cn(

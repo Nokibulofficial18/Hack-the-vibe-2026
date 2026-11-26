@@ -5,18 +5,24 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+const BN_DIGITS = ["০", "১", "২", "৩", "৪", "৫", "৬", "৭", "৮", "৯"];
+
+export function toBanglaDigits(input: string | number): string {
+  return String(input).replace(/\d/g, (d) => BN_DIGITS[Number(d)] ?? d);
+}
+
 /**
  * Formats currency in Bangladeshi Taka (৳ / BDT) using standard Bangladesh
- * South Asian grouping (e.g., ৳15,000, ৳2,50,000, ৳25,00,000).
+ * South Asian grouping (e.g., ৳15,000 or ৳১৫,০০০ in Bangla).
  */
-export function formatCurrency(amount: number): string {
+export function formatCurrency(amount: number, lang: "en" | "bn" = "en"): string {
   const safe = Number.isFinite(amount) ? amount : 0;
   const isWhole = Math.abs(safe - Math.round(safe)) < 0.005;
   const formatted = new Intl.NumberFormat("en-IN", {
     minimumFractionDigits: isWhole ? 0 : 2,
     maximumFractionDigits: 2,
   }).format(safe);
-  return `৳${formatted}`;
+  return lang === "bn" ? `৳${toBanglaDigits(formatted)}` : `৳${formatted}`;
 }
 
 /**
@@ -45,8 +51,11 @@ export function acresToHectares(acres: number): number {
   return Math.round((acres / ACRES_PER_HECTARE) * 10000) / 10000;
 }
 
-export function formatLandArea(sizeHectares: number): string {
-  const bigha = hectaresToBigha(sizeHectares);
-  const acres = hectaresToAcres(sizeHectares);
-  return `${bigha.toFixed(1)} Bigha (${acres.toFixed(2)} Acres)`;
+export function formatLandArea(sizeHectares: number, lang: "en" | "bn" = "en"): string {
+  const bigha = hectaresToBigha(sizeHectares).toFixed(1);
+  const acres = hectaresToAcres(sizeHectares).toFixed(2);
+  if (lang === "bn") {
+    return `${toBanglaDigits(bigha)} বিঘা (${toBanglaDigits(acres)} একর)`;
+  }
+  return `${bigha} Bigha (${acres} Acres)`;
 }

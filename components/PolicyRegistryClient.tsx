@@ -29,7 +29,7 @@ import {
   validatePolicyPayload,
   type MetricType,
 } from "@/lib/domain";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 interface FarmOption {
   id: string;
@@ -75,7 +75,20 @@ const STATUS_BADGE: Record<string, string> = {
 
 export function PolicyRegistryClient() {
   const { user, isAdmin, getAuthHeaders } = useAuth();
-  const { t, translateStatus, translateMetric } = useTranslation();
+  const {
+    t,
+    translateStatus,
+    translateMetric,
+    translateMetricShort,
+    translateUnit,
+    translateFarmName,
+    translateCrop,
+    translatePerson,
+    translateValidationError,
+    formatNum,
+    formatTaka,
+    formatDate,
+  } = useTranslation();
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -179,8 +192,12 @@ export function PolicyRegistryClient() {
     });
 
     if (!validation.valid) {
-      setFieldErrors(validation.errors);
-      const firstError = Object.values(validation.errors)[0];
+      const translatedErrors: Record<string, string> = {};
+      for (const [k, v] of Object.entries(validation.errors)) {
+        translatedErrors[k] = translateValidationError(v);
+      }
+      setFieldErrors(translatedErrors);
+      const firstError = Object.values(translatedErrors)[0];
       setFormError(t("policyFixErrors"));
       toast({
         variant: "error",
@@ -227,10 +244,10 @@ export function PolicyRegistryClient() {
       const meta = getMetricMeta(metricType);
       const msg = t("policyIssuedDesc", {
         metric: translateMetric(metricType),
-        threshold: thresholdValue,
-        unit: meta.unit,
-        coverage: formatCurrency(Number(coverageAmount)),
-        farm: data.policy?.farm.name ?? "",
+        threshold: formatNum(thresholdValue),
+        unit: translateUnit(meta.unit),
+        coverage: formatTaka(Number(coverageAmount)),
+        farm: translateFarmName(data.policy?.farm.name ?? ""),
       });
       setSuccessMessage(msg);
       toast({ variant: "success", title: t("policyIssuedTitle"), description: msg });
@@ -246,7 +263,8 @@ export function PolicyRegistryClient() {
   };
 
   const handleCancelPolicy = async (policy: PolicyRecord) => {
-    if (!window.confirm(t("policyCancelConfirm", { farm: policy.farm.name }))) return;
+    const farmLabel = translateFarmName(policy.farm.name);
+    if (!window.confirm(t("policyCancelConfirm", { farm: farmLabel }))) return;
     try {
       const response = await fetch(`/api/policies/${policy.id}`, {
         method: "PATCH",
@@ -257,7 +275,7 @@ export function PolicyRegistryClient() {
         body: JSON.stringify({ status: "CANCELLED" }),
       });
       if (response.ok) {
-        const msg = t("policyCancelledDesc", { farm: policy.farm.name });
+        const msg = t("policyCancelledDesc", { farm: farmLabel });
         setSuccessMessage(msg);
         toast({ variant: "info", title: t("policyCancelledTitle"), description: msg });
         await loadData();
@@ -333,7 +351,9 @@ export function PolicyRegistryClient() {
             <Sprout className="h-3.5 w-3.5 shrink-0 text-emerald-700" aria-hidden="true" />
           )}
           <span>
-            {isAdmin ? t("policiesRoleAdmin") : t("policiesRoleFarmer", { name: user.name })}
+            {isAdmin
+              ? t("policiesRoleAdmin")
+              : t("policiesRoleFarmer", { name: translatePerson(user.name) })}
           </span>
         </span>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
@@ -355,7 +375,7 @@ export function PolicyRegistryClient() {
           </div>
           <div className="mt-3">
             <p className="text-2xl font-semibold tracking-tight text-slate-900">
-              {formatCurrency(kpis.activeLiability)}
+              {formatTaka(kpis.activeLiability)}
             </p>
             <p className="mt-1 text-xs text-slate-500">{t("kpiActiveLiabilitySub")}</p>
           </div>
@@ -372,8 +392,10 @@ export function PolicyRegistryClient() {
           </div>
           <div className="mt-3">
             <p className="text-2xl font-semibold tracking-tight text-slate-900">
-              {kpis.activeCount}{" "}
-              <span className="text-base font-medium text-slate-400">/ {kpis.claimedCount}</span>
+              {formatNum(kpis.activeCount)}{" "}
+              <span className="text-base font-medium text-slate-400">
+                / {formatNum(kpis.claimedCount)}
+              </span>
             </p>
             <p className="mt-1 text-xs text-slate-500">{t("kpiActiveVsClaimedSub")}</p>
           </div>
@@ -390,7 +412,7 @@ export function PolicyRegistryClient() {
           </div>
           <div className="mt-3">
             <p className="text-2xl font-semibold tracking-tight text-slate-900">
-              {formatCurrency(kpis.totalPremiums)}
+              {formatTaka(kpis.totalPremiums)}
             </p>
             <p className="mt-1 text-xs text-slate-500">{t("kpiPremiumsPoolSub")}</p>
           </div>
@@ -457,8 +479,8 @@ export function PolicyRegistryClient() {
                 >
                   {farms.map((farm) => (
                     <option key={farm.id} value={farm.id}>
-                      {farm.name} — {farm.cropType}
-                      {isAdmin ? ` (${farm.user.name})` : ""}
+                      {translateFarmName(farm.name)} — {translateCrop(farm.cropType)}
+                      {isAdmin ? ` (${translatePerson(farm.user.name)})` : ""}
                     </option>
                   ))}
                 </select>
@@ -479,7 +501,7 @@ export function PolicyRegistryClient() {
                 >
                   {METRIC_OPTIONS.map((m) => (
                     <option key={m.type} value={m.type}>
-                      {translateMetric(m.type)} ({m.type})
+                      {translateMetric(m.type)}
                     </option>
                   ))}
                 </select>
@@ -491,7 +513,7 @@ export function PolicyRegistryClient() {
                     htmlFor="threshold-val"
                     className="block text-xs font-medium text-slate-600"
                   >
-                    {t("triggerThresholdLabel", { unit: activeMetricMeta.unit })}
+                    {t("triggerThresholdLabel", { unit: translateUnit(activeMetricMeta.unit) })}
                   </label>
                   <input
                     id="threshold-val"
@@ -544,7 +566,7 @@ export function PolicyRegistryClient() {
                             : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                         )}
                       >
-                        {formatCurrency(preset)}
+                        {formatTaka(preset)}
                       </button>
                     ))}
                   </div>
@@ -612,20 +634,21 @@ export function PolicyRegistryClient() {
                 <div className="mt-2.5 grid grid-cols-2 gap-2.5 text-xs">
                   <div className="rounded-lg border border-slate-200/80 bg-white p-2.5">
                     <span className="text-[11px] font-medium text-amber-700">
-                      {t("moderateLabel")} ({parsedThreshold}–{severeCutoff - 0.1}
-                      {activeMetricMeta.unit}) · 50%
+                      {t("moderateLabel")} ({formatNum(parsedThreshold)}–
+                      {formatNum(severeCutoff - 0.1)} {translateUnit(activeMetricMeta.unit)}) ·{" "}
+                      {formatNum(50)}%
                     </span>
                     <p className="mt-0.5 text-sm font-semibold text-slate-900">
-                      {formatCurrency(moderatePreview.payoutAmount)}
+                      {formatTaka(moderatePreview.payoutAmount)}
                     </p>
                   </div>
                   <div className="rounded-lg border border-slate-200/80 bg-white p-2.5">
                     <span className="text-[11px] font-medium text-emerald-700">
-                      {t("severeLabel")} (≥ {severeCutoff}
-                      {activeMetricMeta.unit}) · 100%
+                      {t("severeLabel")} (≥ {formatNum(severeCutoff)}{" "}
+                      {translateUnit(activeMetricMeta.unit)}) · {formatNum(100)}%
                     </span>
                     <p className="mt-0.5 text-sm font-semibold text-slate-900">
-                      {formatCurrency(severePreview.payoutAmount)}
+                      {formatTaka(severePreview.payoutAmount)}
                     </p>
                   </div>
                 </div>
@@ -652,7 +675,7 @@ export function PolicyRegistryClient() {
                   {t("policyContractsHeading")}
                 </h2>
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                  {filteredPolicies.length}
+                  {formatNum(filteredPolicies.length)}
                 </span>
               </div>
 
@@ -742,30 +765,31 @@ export function PolicyRegistryClient() {
                       return (
                         <tr key={policy.id} className="transition hover:bg-slate-50/80">
                           <td className="px-4 py-3.5">
-                            <div className="font-medium text-slate-900">{policy.farm.name}</div>
+                            <div className="font-medium text-slate-900">
+                              {translateFarmName(policy.farm.name)}
+                            </div>
                             <div className="text-xs text-slate-500">
-                              {policy.farm.cropType}
-                              {isAdmin ? ` · ${policy.farm.user.name}` : ""}
+                              {translateCrop(policy.farm.cropType)}
+                              {isAdmin ? ` · ${translatePerson(policy.farm.user.name)}` : ""}
                             </div>
                             <div className="mt-0.5 text-[11px] text-slate-400">
-                              {new Date(policy.startDate).toLocaleDateString()} –{" "}
-                              {new Date(policy.endDate).toLocaleDateString()}
+                              {formatDate(policy.startDate)} – {formatDate(policy.endDate)}
                             </div>
                           </td>
                           <td className="whitespace-nowrap px-4 py-3.5">
-                            <span className="inline-block rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-[11px] font-medium text-slate-700">
-                              {policy.metricType}
+                            <span className="inline-block rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                              {translateMetricShort(policy.metricType)}
                             </span>
                             <div className="mt-1 text-xs font-medium text-slate-700">
-                              ≥ {policy.thresholdValue} {meta.unit}
+                              ≥ {formatNum(policy.thresholdValue)} {translateUnit(meta.unit)}
                             </div>
                           </td>
                           <td className="whitespace-nowrap px-4 py-3.5">
                             <div className="font-semibold text-slate-900">
-                              {formatCurrency(policy.coverageAmount)}
+                              {formatTaka(policy.coverageAmount)}
                             </div>
                             <div className="text-xs text-slate-500">
-                              {t("premiumPrefix")} {formatCurrency(policy.premiumPaid)}
+                              {t("premiumPrefix")} {formatTaka(policy.premiumPaid)}
                             </div>
                           </td>
                           <td className="whitespace-nowrap px-4 py-3.5">

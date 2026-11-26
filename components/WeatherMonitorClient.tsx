@@ -23,7 +23,7 @@ import { useAuth } from "@/lib/auth";
 import { useTranslation } from "@/lib/i18n";
 import { useToast } from "@/components/ToastProvider";
 import { getMetricMeta, type ParsedWeatherReading, type RiskLevel } from "@/lib/domain";
-import { cn, formatCurrency, formatLandArea } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import {
   WeatherFaultInjector,
   type FaultToggles,
@@ -94,7 +94,18 @@ const RISK_STYLES: Record<RiskLevel, { badge: string; bar: string }> = {
 
 export function WeatherMonitorClient() {
   const { user, isAdmin, getAuthHeaders } = useAuth();
-  const { t, translateStatus } = useTranslation();
+  const {
+    t,
+    translateStatus,
+    translatePerson,
+    translateFarmName,
+    translateCrop,
+    translateMetricShort,
+    translateUnit,
+    formatNum,
+    formatTaka,
+    formatArea,
+  } = useTranslation();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -213,15 +224,18 @@ export function WeatherMonitorClient() {
       } else if (fallbackResults.length > 0 && liveResults.length === 0) {
         const msg =
           fallbackResults[0].warningBanner ??
-          `External API unavailable for ${fallbackResults.length} plot(s). Displaying cached snapshot.`;
+          t("syncFallbackPlotMsg", { count: fallbackResults.length });
         setBanner({ type: "warning", message: msg });
         toast({ variant: "warning", title: t("cacheFallbackTitle"), description: msg });
       } else if (fallbackResults.length > 0) {
-        const msg = `Synced ${liveResults.length} live & ${fallbackResults.length} cached plot(s).`;
+        const msg = t("syncMixedMsg", {
+          live: liveResults.length,
+          cached: fallbackResults.length,
+        });
         setBanner({ type: "warning", message: msg });
         toast({ variant: "warning", title: t("cacheFallbackTitle"), description: msg });
       } else {
-        const msg = `${t("liveTelemetryTitle")} (${liveResults.length})`;
+        const msg = `${t("liveTelemetryTitle")} (${formatNum(liveResults.length)})`;
         setBanner({ type: "success", message: msg });
         toast({ variant: "success", title: t("liveTelemetryTitle"), description: msg });
       }
@@ -278,7 +292,7 @@ export function WeatherMonitorClient() {
         return;
       }
 
-      const msg = `${t("disbursedAmount", { amount: formatCurrency(data.claim?.payoutAmount ?? 0) })}${data.claim?.transactionId ? ` (Txn: ${data.claim.transactionId})` : ""}`;
+      const msg = `${t("disbursedAmount", { amount: formatTaka(data.claim?.payoutAmount ?? 0) })}${data.claim?.transactionId ? ` (${t("txnShortPrefix")} ${data.claim.transactionId})` : ""}`;
       setBanner({ type: "success", message: msg });
       toast({ variant: "success", title: t("payoutDisbursedTitle"), description: msg });
 
@@ -317,7 +331,9 @@ export function WeatherMonitorClient() {
         <div className="relative flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
           <div className="min-w-0">
             <p className="text-xs font-medium uppercase tracking-wider text-emerald-200">
-              {isAdmin ? t("monitorEyebrowAdmin") : t("monitorEyebrowFarmer", { name: user.name })}
+              {isAdmin
+                ? t("monitorEyebrowAdmin")
+                : t("monitorEyebrowFarmer", { name: translatePerson(user.name) })}
             </p>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight text-white">
               {t("monitorHeading")}
@@ -368,7 +384,7 @@ export function WeatherMonitorClient() {
               </div>
               <div className="mt-3">
                 <p className="text-2xl font-semibold tracking-tight text-slate-900">
-                  {formatCurrency(kpis.totalLiability)}
+                  {formatTaka(kpis.totalLiability)}
                 </p>
                 <p className="mt-1 text-xs text-slate-600">
                   {t("kpiActiveContractsSub", { count: kpis.activePoliciesCount })}
@@ -387,7 +403,7 @@ export function WeatherMonitorClient() {
               </div>
               <div className="mt-3">
                 <p className="text-2xl font-semibold tracking-tight text-slate-900">
-                  {formatCurrency(kpis.totalPayoutsIssued)}
+                  {formatTaka(kpis.totalPayoutsIssued)}
                 </p>
                 <p className="mt-1 text-xs text-slate-600">
                   {t("kpiSettledPayoutsSub", { count: kpis.disbursedClaimsCount })}
@@ -418,7 +434,7 @@ export function WeatherMonitorClient() {
               </div>
               <div className="mt-3">
                 <p className="text-2xl font-semibold tracking-tight text-slate-900">
-                  {formatCurrency(kpis.activeRiskExposure)}
+                  {formatTaka(kpis.activeRiskExposure)}
                 </p>
                 <p className="mt-1 text-xs text-slate-600">
                   {t("kpiRiskExposureSub", {
@@ -441,7 +457,7 @@ export function WeatherMonitorClient() {
               </div>
               <div className="mt-3">
                 <p className="text-2xl font-semibold tracking-tight text-slate-900">
-                  {kpis.healthyPoliciesCount}{" "}
+                  {formatNum(kpis.healthyPoliciesCount)}{" "}
                   <span className="text-sm font-normal text-slate-500">
                     {t("kpiSafeTag", { count: kpis.activePoliciesCount })}
                   </span>
@@ -536,7 +552,9 @@ export function WeatherMonitorClient() {
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-sm font-semibold text-slate-900">{farm.name}</h3>
+                            <h3 className="text-sm font-semibold text-slate-900">
+                              {translateFarmName(farm.name)}
+                            </h3>
                             <span
                               className={cn(
                                 "whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
@@ -566,12 +584,13 @@ export function WeatherMonitorClient() {
                             )}
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                            <span>{farm.cropType}</span>
+                            <span>{translateCrop(farm.cropType)}</span>
                             <span>·</span>
-                            <span>{formatLandArea(farm.sizeHectares)}</span>
+                            <span>{formatArea(farm.sizeHectares)}</span>
                             <span>·</span>
                             <span className="font-mono">
-                              {farm.latitude.toFixed(4)}, {farm.longitude.toFixed(4)}
+                              {formatNum(farm.latitude.toFixed(4))},{" "}
+                              {formatNum(farm.longitude.toFixed(4))}
                             </span>
                           </div>
                         </div>
@@ -596,7 +615,9 @@ export function WeatherMonitorClient() {
                             <span className="truncate">{t("rain24h")}</span>
                           </div>
                           <p className="mt-1 text-base font-semibold text-slate-900">
-                            {farm.weather ? `${farm.weather.rainMm} mm` : "—"}
+                            {farm.weather
+                              ? `${formatNum(farm.weather.rainMm)} ${translateUnit("mm")}`
+                              : "—"}
                           </p>
                         </div>
 
@@ -606,7 +627,9 @@ export function WeatherMonitorClient() {
                             <span className="truncate">{t("peakTemp")}</span>
                           </div>
                           <p className="mt-1 text-base font-semibold text-slate-900">
-                            {farm.weather ? `${farm.weather.tempMaxC} °C` : "—"}
+                            {farm.weather
+                              ? `${formatNum(farm.weather.tempMaxC)} ${translateUnit("°C")}`
+                              : "—"}
                           </p>
                         </div>
 
@@ -616,7 +639,9 @@ export function WeatherMonitorClient() {
                             <span className="truncate">{t("dryStreak")}</span>
                           </div>
                           <p className="mt-1 text-base font-semibold text-slate-900">
-                            {farm.weather ? `${farm.weather.droughtDays} ${t("unitDaysShort")}` : "—"}
+                            {farm.weather
+                              ? `${formatNum(farm.weather.droughtDays)} ${t("unitDaysShort")}`
+                              : "—"}
                           </p>
                         </div>
                       </div>
@@ -624,6 +649,7 @@ export function WeatherMonitorClient() {
                       <div className="mt-4 space-y-2.5 border-t border-slate-100 pt-4">
                         {farm.policies.map((policy) => {
                           const meta = getMetricMeta(policy.metricType);
+                          const unitLabel = translateUnit(meta.unit);
                           const riskStyle = RISK_STYLES[policy.riskLevel];
                           const progressPct = Math.min(100, Math.round(policy.ratio * 100));
                           const defaultSimValue = Math.round(policy.thresholdValue * 1.25);
@@ -635,20 +661,19 @@ export function WeatherMonitorClient() {
                             >
                               <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                                 <div className="flex items-center gap-2">
-                                  <span className="rounded border border-slate-200 bg-white px-2 py-0.5 font-mono text-[11px] font-medium text-slate-700">
-                                    {policy.metricType}
+                                  <span className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                                    {translateMetricShort(policy.metricType)}
                                   </span>
                                   <span className="font-medium text-slate-900">
                                     {policy.observedValue !== null
-                                      ? `${policy.observedValue}${meta.unit}`
+                                      ? `${formatNum(policy.observedValue)} ${unitLabel}`
                                       : "—"}{" "}
-                                    / {policy.thresholdValue}
-                                    {meta.unit}
+                                    / {formatNum(policy.thresholdValue)} {unitLabel}
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <span className="font-semibold text-slate-900">
-                                    {formatCurrency(policy.coverageAmount)}
+                                    {formatTaka(policy.coverageAmount)}
                                   </span>
                                   <span
                                     className={cn(
@@ -725,7 +750,7 @@ export function WeatherMonitorClient() {
                                   <span className="inline-flex items-center gap-1">
                                     <Play className="h-3 w-3 shrink-0 text-emerald-700" />
                                     {t("disbursedAmount", {
-                                      amount: formatCurrency(policy.claims[0].payoutAmount),
+                                      amount: formatTaka(policy.claims[0].payoutAmount),
                                     })}
                                   </span>
                                   <Link

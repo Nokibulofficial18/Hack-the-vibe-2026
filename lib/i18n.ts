@@ -9,6 +9,7 @@ import React, {
   useState,
   type ReactNode,
 } from "react";
+import { formatCurrency, formatLandArea, toBanglaDigits } from "@/lib/utils";
 
 export type Language = "en" | "bn";
 
@@ -262,6 +263,8 @@ export const TRANSLATIONS = {
     viewReceiptArrow: "View Receipt →",
     telemetryLoadErrTitle: "Telemetry Load Error",
     telemetryLoadErrDesc: "Unable to load farm weather readings.",
+    syncFallbackPlotMsg: "External API unavailable for {count} plot(s). Displaying cached snapshot.",
+    syncMixedMsg: "Synced {live} live & {cached} cached plot(s).",
     syncBlockedTitle: "Weather Sync Blocked",
     apiCacheUnavailableTitle: "API & Cache Unavailable",
     cacheFallbackTitle: "Cache Fallback Activated",
@@ -444,6 +447,8 @@ export const TRANSLATIONS = {
     printReceiptBtn: "Print Receipt",
     verifiedReceiptModalTitle: "Verified WeatherShield Settlement Receipt",
     txnCopiedTitle: "Transaction ID Copied",
+    txnShortPrefix: "Txn:",
+    bstTimezone: "BST",
     severeBreachBadge: "SEVERE BREACH ({pct}%)",
     moderateBreachBadge: "MODERATE BREACH ({pct}%)",
     parametricSettlementBadge: "PARAMETRIC SETTLEMENT",
@@ -471,7 +476,7 @@ export const TRANSLATIONS = {
   },
   bn: {
     // Brand & Shell
-    brandName: "WeatherShield",
+    brandName: "ওয়েদারশিল্ড",
     brandTagline: "বাংলাদেশ ক্লাইমেট ফিনটেক",
     brandSubtitle: "বাংলাদেশ ক্লাইমেট ফিনটেক · ক্ষুদ্র শস্য বীমা",
     skipToContent: "মূল অংশে যান",
@@ -716,6 +721,8 @@ export const TRANSLATIONS = {
     viewReceiptArrow: "রসিদ দেখুন →",
     telemetryLoadErrTitle: "আবহাওয়া তথ্য লোড ব্যর্থ",
     telemetryLoadErrDesc: "জমির আবহাওয়া তথ্য লোড করা যায়নি।",
+    syncFallbackPlotMsg: "{count}টি জমির জন্য বাহ্যিক এপিআই অনুপলব্ধ। সংরক্ষিত ক্যাশ তথ্য দেখানো হচ্ছে।",
+    syncMixedMsg: "{live}টি লাইভ ও {cached}টি ক্যাশ তথ্য আপডেট করা হয়েছে।",
     syncBlockedTitle: "আবহাওয়া আপডেট বাধাগ্রস্ত",
     apiCacheUnavailableTitle: "এপিআই ও ক্যাশ অনুপলব্ধ",
     cacheFallbackTitle: "ক্যাশ ফলব্যাক চালু হয়েছে",
@@ -895,8 +902,10 @@ export const TRANSLATIONS = {
     weatherTriggerLabel: "আবহাওয়া ট্রিগার তথ্য",
     idempotencyLockLabel: "ডুপ্লিকেট লক কী:",
     printReceiptBtn: "রসিদ প্রিন্ট করুন",
-    verifiedReceiptModalTitle: "যাচাইকৃত WeatherShield অর্থপ্রদান রসিদ",
+    verifiedReceiptModalTitle: "যাচাইকৃত ওয়েদারশিল্ড অর্থপ্রদান রসিদ",
     txnCopiedTitle: "লেনদেন আইডি কপি করা হয়েছে",
+    txnShortPrefix: "লেনদেন:",
+    bstTimezone: "বাংলাদেশ সময়",
     severeBreachBadge: "তীব্র সীমা অতিক্রম ({pct}%)",
     moderateBreachBadge: "মাঝারি সীমা অতিক্রম ({pct}%)",
     parametricSettlementBadge: "প্যারামেট্রিক নিষ্পত্তি",
@@ -990,6 +999,144 @@ const METRIC_LABELS: Record<Language, Record<string, string>> = {
   },
 };
 
+const METRIC_SHORT_LABELS: Record<Language, Record<string, string>> = {
+  en: {
+    RAINFALL_MAX: "Rainfall",
+    TEMP_MAX: "Max Temp",
+    DROUGHT_DAYS: "Drought",
+  },
+  bn: {
+    RAINFALL_MAX: "বৃষ্টিপাত",
+    TEMP_MAX: "তাপমাত্রা",
+    DROUGHT_DAYS: "খরা দিন",
+  },
+};
+
+const UNIT_LABELS: Record<Language, Record<string, string>> = {
+  en: {
+    mm: "mm",
+    "°C": "°C",
+    days: "days",
+  },
+  bn: {
+    mm: "মিমি",
+    "°C": "°সে.",
+    days: "দিন",
+  },
+};
+
+const MFS_LABELS: Record<Language, Record<string, { label: string; tagline: string }>> = {
+  en: {
+    BKASH: { label: "bKash", tagline: "bKash Instant Agri-Payout" },
+    NAGAD: { label: "Nagad", tagline: "Nagad Instant Micro-Disbursement" },
+    ROCKET: { label: "Rocket", tagline: "DBBL Rocket Mobile Banking" },
+  },
+  bn: {
+    BKASH: { label: "বিকাশ", tagline: "বিকাশ তাৎক্ষণিক কৃষি-ক্ষতিপূরণ" },
+    NAGAD: { label: "নগদ", tagline: "নগদ তাৎক্ষণিক ক্ষুদ্র-অর্থপ্রদান" },
+    ROCKET: { label: "রকেট", tagline: "ডাচ-বাংলা রকেট মোবাইল ব্যাংকিং" },
+  },
+};
+
+const DISTRICT_LABELS_BN: Record<string, string> = {
+  Sunamganj: "সুনামগঞ্জ",
+  "Sunamganj (Haor)": "সুনামগঞ্জ (হাওর)",
+  Satkhira: "সাতক্ষীরা",
+  "Satkhira (Coastal)": "সাতক্ষীরা (উপকূলীয়)",
+  Rajshahi: "রাজশাহী",
+  "Rajshahi (Barind Tract)": "রাজশাহী (বরেন্দ্র অঞ্চল)",
+  Kurigram: "কুড়িগ্রাম",
+  "Kurigram (Riverine)": "কুড়িগ্রাম (নদী তীরবর্তী)",
+  Bogura: "বগুড়া",
+  "Other BD": "অন্যান্য জেলা",
+};
+
+const RISK_PROFILE_BN: Record<string, string> = {
+  "Flash Flood risk": "আকস্মিক বন্যার ঝুঁকি",
+  "Cyclone & Heavy Rainfall risk": "ঘূর্ণিঝড় ও ভারী বৃষ্টির ঝুঁকি",
+  "Drought & Extreme Heat risk": "খরা ও তীব্র তাপপ্রবাহের ঝুঁকি",
+  "Monsoon Flood risk": "বর্ষাকালীন বন্যার ঝুঁকি",
+  "Irregular Rainfall risk": "অনিয়মিত বৃষ্টির ঝুঁকি",
+};
+
+const CROP_LABELS_BN: Record<string, string> = {
+  "Boro Rice": "বোরো ধান",
+  "Aman Paddy": "আমন ধান",
+  "Aman Paddy / Shrimp Aquaculture": "আমন ধান / চিংড়ি চাষ",
+  "Mango / Wheat": "আম / গম",
+  "Jute / Aman Paddy": "পাট / আমন ধান",
+  "Potato / Rice": "আলু / ধান",
+  "Shrimp & Aman Paddy": "চিংড়ি ও আমন ধান",
+  "Mango Orchard & Wheat": "আম বাগান ও গম",
+  "Jute & Aman Paddy": "পাট ও আমন ধান",
+  "Potato & Boro Rice": "আলু ও বোরো ধান",
+};
+
+const PERSON_LABELS_BN: Record<string, string> = {
+  "Abdul Karim": "আব্দুল করিম",
+  "Rokon Uddin": "রোকন উদ্দিন",
+  "Fatima Begum": "ফাতেমা বেগম",
+};
+
+const FARM_NAME_BN: Record<string, string> = {
+  "Tahirpur Haor Boro Plot (Sunamganj)": "তাহিরপুর হাওর বোরো জমি (সুনামগঞ্জ)",
+  "Chilmari Riverine Char Farm (Kurigram)": "চিলমারী নদী তীরবর্তী চর খামার (কুড়িগ্রাম)",
+  "Sherpur Alluvial Potato Field (Bogura)": "শেরপুর পলিমাটির আলু ক্ষেত (বগুড়া)",
+  "Shyamnagar Coastal Gher & Paddy (Satkhira)": "শ্যামনগর উপকূলীয় ঘের ও ধান ক্ষেত (সাতক্ষীরা)",
+  "Godagari Barind Mango & Wheat (Rajshahi)": "গোদাগাড়ী বরেন্দ্র আম ও গম খামার (রাজশাহী)",
+  "Tahirpur Haor Boro Plot": "তাহিরপুর হাওর বোরো জমি",
+  "Chilmari Riverine Char Farm": "চিলমারী নদী তীরবর্তী চর খামার",
+  "Sherpur Alluvial Potato Field": "শেরপুর পলিমাটির আলু ক্ষেত",
+  "Shyamnagar Coastal Gher & Paddy": "শ্যামনগর উপকূলীয় ঘের ও ধান ক্ষেত",
+  "Godagari Barind Mango & Wheat": "গোদাগাড়ী বরেন্দ্র আম ও গম খামার",
+};
+
+const STEP_LABELS: Record<Language, Record<string, string>> = {
+  en: {
+    EVENT_DETECTED: "EVENT_DETECTED",
+    POLICY_VALIDATED: "POLICY_VALIDATED",
+    PAYOUT_CALCULATED: "PAYOUT_CALCULATED",
+    FUNDS_RESERVED: "FUNDS_RESERVED",
+    DISBURSEMENT_ISSUED: "DISBURSEMENT_ISSUED",
+  },
+  bn: {
+    EVENT_DETECTED: "ঘটনা শনাক্তকরণ",
+    POLICY_VALIDATED: "পলিসি যাচাইকরণ",
+    PAYOUT_CALCULATED: "ক্ষতিপূরণ হিসাবকরণ",
+    FUNDS_RESERVED: "তহবিল সংরক্ষণ",
+    DISBURSEMENT_ISSUED: "অর্থপ্রদান সম্পন্নকরণ",
+  },
+};
+
+const ATTEMPT_STATUS_BN: Record<string, string> = {
+  SUCCESS: "সফল",
+  TIMEOUT: "টাইমআউট",
+  MALFORMED_JSON: "ত্রুটিপূর্ণ জেসন",
+  HTTP_ERROR: "এইচটিটিপি ত্রুটি",
+  NETWORK_ERROR: "নেটওয়ার্ক ত্রুটি",
+  RATE_LIMITED: "সীমা অতিক্রান্ত",
+  OFFLINE_FORCED: "অফলাইন মোড",
+};
+
+const VALIDATION_ERROR_BN: Record<string, string> = {
+  "Farm name must be at least 2 characters.": "জমির নাম কমপক্ষে ২ অক্ষরের হতে হবে।",
+  "Crop type must be at least 2 characters.": "ফসলের ধরন কমপক্ষে ২ অক্ষরের হতে হবে।",
+  "Latitude must be a valid number.": "অক্ষাংশ একটি সঠিক সংখ্যা হতে হবে।",
+  "Latitude must be between -90 and 90 degrees.": "অক্ষাংশ অবশ্যই -৯০ থেকে ৯০ ডিগ্রির মধ্যে হতে হবে।",
+  "Longitude must be a valid number.": "দ্রাঘিমাংশ একটি সঠিক সংখ্যা হতে হবে।",
+  "Longitude must be between -180 and 180 degrees.": "দ্রাঘিমাংশ অবশ্যই -১৮০ থেকে ১৮০ ডিগ্রির মধ্যে হতে হবে।",
+  "Land area must be a valid number.": "জমির পরিমাণ একটি সঠিক সংখ্যা হতে হবে।",
+  "Land area must be greater than 0.": "জমির পরিমাণ ০-এর বেশি হতে হবে।",
+  "Please select a farm plot.": "অনুগ্রহ করে একটি জমি নির্বাচন করুন।",
+  "Metric type must be RAINFALL_MAX, TEMP_MAX, or DROUGHT_DAYS.": "সঠিক আবহাওয়া সূচক নির্বাচন করুন।",
+  "Threshold value must be greater than 0.": "ট্রিগার সীমা ০-এর বেশি হতে হবে।",
+  "Coverage amount must be greater than ৳0.": "বীমা কভারেজ অবশ্যই ৳০-এর বেশি হতে হবে।",
+  "Coverage amount cannot exceed ৳50,00,000 per micro-policy.":
+    "প্রতি ক্ষুদ্র-পলিসিতে কভারেজ ৳৫০,০০,০০০-এর বেশি হতে পারবে না।",
+  "Premium paid must be ৳0 or greater.": "প্রদত্ত প্রিমিয়াম ৳০ বা তার বেশি হতে হবে।",
+  "Coverage duration must be between 7 and 730 days.": "মেয়াদকাল ৭ থেকে ৭৩০ দিনের মধ্যে হতে হবে।",
+};
+
 export type TranslationVars = Record<string, string | number>;
 
 export interface LanguageContextValue {
@@ -1000,6 +1147,25 @@ export interface LanguageContextValue {
   t: (key: TranslationKey, vars?: TranslationVars) => string;
   translateStatus: (status: string) => string;
   translateMetric: (metricType: string) => string;
+  translateMetricShort: (metricType: string) => string;
+  translateUnit: (unit: string) => string;
+  translateMfs: (method?: string | null) => string;
+  translateMfsTagline: (method?: string | null) => string;
+  translateDistrict: (district: string) => string;
+  translateRiskProfile: (profile: string) => string;
+  translateCrop: (cropType: string) => string;
+  translatePerson: (name: string) => string;
+  translateFarmName: (name: string) => string;
+  translateStepName: (stepName: string) => string;
+  translateAttemptStatus: (status: string) => string;
+  translateValidationError: (msg: string) => string;
+  formatNum: (value: string | number) => string;
+  formatTaka: (amount: number) => string;
+  formatArea: (sizeHectares: number) => string;
+  formatDate: (iso: string) => string;
+  formatDateTime: (iso: string) => string;
+  formatTime: (iso: string) => string;
+  formatDayLabel: (isoDate: string) => string;
 }
 
 const LanguageContext = createContext<LanguageContextValue | undefined>(undefined);
@@ -1044,7 +1210,9 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       let text: string = TRANSLATIONS[lang][key] ?? TRANSLATIONS.en[key];
       if (vars) {
         for (const [k, v] of Object.entries(vars)) {
-          text = text.replace(new RegExp(`\\{${k}\\}`, "g"), String(v));
+          const rendered =
+            lang === "bn" && typeof v === "number" ? toBanglaDigits(v) : String(v);
+          text = text.replace(new RegExp(`\\{${k}\\}`, "g"), rendered);
         }
       }
       return text;
@@ -1062,6 +1230,131 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     [lang]
   );
 
+  const translateMetricShort = useCallback(
+    (metricType: string): string => METRIC_SHORT_LABELS[lang][metricType] ?? metricType,
+    [lang]
+  );
+
+  const translateUnit = useCallback(
+    (unit: string): string => UNIT_LABELS[lang][unit] ?? unit,
+    [lang]
+  );
+
+  const translateMfs = useCallback(
+    (method?: string | null): string => {
+      const key = method === "NAGAD" || method === "ROCKET" ? method : "BKASH";
+      return MFS_LABELS[lang][key].label;
+    },
+    [lang]
+  );
+
+  const translateMfsTagline = useCallback(
+    (method?: string | null): string => {
+      const key = method === "NAGAD" || method === "ROCKET" ? method : "BKASH";
+      return MFS_LABELS[lang][key].tagline;
+    },
+    [lang]
+  );
+
+  const translateDistrict = useCallback(
+    (district: string): string => (lang === "bn" ? DISTRICT_LABELS_BN[district] ?? district : district),
+    [lang]
+  );
+
+  const translateRiskProfile = useCallback(
+    (profile: string): string => (lang === "bn" ? RISK_PROFILE_BN[profile] ?? profile : profile),
+    [lang]
+  );
+
+  const translateCrop = useCallback(
+    (cropType: string): string => (lang === "bn" ? CROP_LABELS_BN[cropType] ?? cropType : cropType),
+    [lang]
+  );
+
+  const translatePerson = useCallback(
+    (name: string): string => (lang === "bn" ? PERSON_LABELS_BN[name] ?? name : name),
+    [lang]
+  );
+
+  const translateFarmName = useCallback(
+    (name: string): string => (lang === "bn" ? FARM_NAME_BN[name] ?? name : name),
+    [lang]
+  );
+
+  const translateStepName = useCallback(
+    (stepName: string): string => STEP_LABELS[lang][stepName] ?? stepName,
+    [lang]
+  );
+
+  const translateAttemptStatus = useCallback(
+    (status: string): string => (lang === "bn" ? ATTEMPT_STATUS_BN[status] ?? status : status),
+    [lang]
+  );
+
+  const translateValidationError = useCallback(
+    (msg: string): string => (lang === "bn" ? VALIDATION_ERROR_BN[msg] ?? msg : msg),
+    [lang]
+  );
+
+  const formatNum = useCallback(
+    (value: string | number): string => (lang === "bn" ? toBanglaDigits(value) : String(value)),
+    [lang]
+  );
+
+  const formatTaka = useCallback(
+    (amount: number): string => formatCurrency(amount, lang),
+    [lang]
+  );
+
+  const formatArea = useCallback(
+    (sizeHectares: number): string => formatLandArea(sizeHectares, lang),
+    [lang]
+  );
+
+  const formatDate = useCallback(
+    (iso: string): string => {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return iso;
+      return d.toLocaleDateString(lang === "bn" ? "bn-BD" : "en-US");
+    },
+    [lang]
+  );
+
+  const formatDateTime = useCallback(
+    (iso: string): string => {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return iso;
+      return d.toLocaleString(lang === "bn" ? "bn-BD" : "en-GB", {
+        timeZone: "Asia/Dhaka",
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+    },
+    [lang]
+  );
+
+  const formatTime = useCallback(
+    (iso: string): string => {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return iso;
+      return d.toLocaleTimeString(lang === "bn" ? "bn-BD" : "en-US");
+    },
+    [lang]
+  );
+
+  const formatDayLabel = useCallback(
+    (isoDate: string): string => {
+      const parsed = new Date(`${isoDate}T00:00:00Z`);
+      if (Number.isNaN(parsed.getTime())) return isoDate;
+      return parsed.toLocaleDateString(lang === "bn" ? "bn-BD" : "en-US", {
+        weekday: "short",
+        day: "numeric",
+        timeZone: "UTC",
+      });
+    },
+    [lang]
+  );
+
   const value = useMemo<LanguageContextValue>(
     () => ({
       lang,
@@ -1071,8 +1364,53 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       t,
       translateStatus,
       translateMetric,
+      translateMetricShort,
+      translateUnit,
+      translateMfs,
+      translateMfsTagline,
+      translateDistrict,
+      translateRiskProfile,
+      translateCrop,
+      translatePerson,
+      translateFarmName,
+      translateStepName,
+      translateAttemptStatus,
+      translateValidationError,
+      formatNum,
+      formatTaka,
+      formatArea,
+      formatDate,
+      formatDateTime,
+      formatTime,
+      formatDayLabel,
     }),
-    [lang, setLang, toggleLang, t, translateStatus, translateMetric]
+    [
+      lang,
+      setLang,
+      toggleLang,
+      t,
+      translateStatus,
+      translateMetric,
+      translateMetricShort,
+      translateUnit,
+      translateMfs,
+      translateMfsTagline,
+      translateDistrict,
+      translateRiskProfile,
+      translateCrop,
+      translatePerson,
+      translateFarmName,
+      translateStepName,
+      translateAttemptStatus,
+      translateValidationError,
+      formatNum,
+      formatTaka,
+      formatArea,
+      formatDate,
+      formatDateTime,
+      formatTime,
+      formatDayLabel,
+    ]
   );
 
   return React.createElement(LanguageContext.Provider, { value }, children);

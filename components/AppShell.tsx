@@ -46,7 +46,7 @@ export function AppShell({
   const pathname = usePathname();
   const router = useRouter();
   const { user, users, isAdmin, switchRole, switchUser, getAuthHeaders } = useAuth();
-  const { lang, isBangla, setLang, t } = useTranslation();
+  const { lang, isBangla, setLang, t, translatePerson } = useTranslation();
   const { toast } = useToast();
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -96,7 +96,7 @@ export function AppShell({
       if (target.role !== "ADMIN") setJudgeDrawerOpen(false);
       toast({
         variant: "info",
-        title: t("activeAccountToast", { name: target.name }),
+        title: t("activeAccountToast", { name: translatePerson(target.name) }),
         description: `${target.role === "ADMIN" ? t("roleAdmin") : t("roleFarmer")} · ${target.email}`,
       });
     }
@@ -265,7 +265,7 @@ export function AppShell({
           >
             {users.map((account) => (
               <option key={account.id} value={account.id}>
-                {account.name} ({account.role === "ADMIN" ? t("roleAdmin") : t("roleFarmer")})
+                {translatePerson(account.name)} ({account.role === "ADMIN" ? t("roleAdmin") : t("roleFarmer")})
               </option>
             ))}
           </select>
@@ -340,7 +340,7 @@ export function AppShell({
               </span>
               <span className="hidden text-slate-300 sm:inline">/</span>
               <span className="hidden truncate text-xs text-slate-500 sm:inline">
-                {user.name} ·{" "}
+                {translatePerson(user.name)} ·{" "}
                 <span className="font-medium text-slate-700">
                   {user.role === "ADMIN" ? t("roleAdmin") : t("roleFarmer")}
                 </span>
